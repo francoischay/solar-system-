@@ -4,15 +4,15 @@ Petite application Expo / React Native basée sur le prototype `systeme-solaire-
 
 ## Architecture du MVP
 
-Le moteur 3D Three.js existant est embarqué comme asset local et exécuté dans une `WebView`. Cela permet de conserver immédiatement :
+Le moteur 3D est embarqué dans une `WebView` React Native. La scène conserve l’esprit et les interactions principales du prototype :
 
-- la vue 3D du système solaire ;
-- le zoom, pan et gestes tactiles ;
-- la sélection et le suivi des planètes ;
-- la timeline et la simulation du temps ;
-- les thèmes et labels du prototype.
+- vue 3D du système solaire ;
+- zoom et rotation tactile ;
+- sélection et suivi des planètes ;
+- timeline et simulation du temps ;
+- thèmes et labels.
 
-L'application fonctionne donc hors ligne une fois installée, sans serveur web.
+Pour garder ce premier dépôt léger, Three.js est chargé depuis un CDN HTTPS par la WebView. Une connexion est donc nécessaire au chargement de la scène. Une prochaine étape pourra embarquer Three.js localement ou porter la scène vers `@react-three/native` pour un fonctionnement entièrement hors ligne.
 
 ## Lancer le projet
 
