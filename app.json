@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Système solaire 3D",
+    "slug": "solar-system-3d",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "assetBundlePatterns": ["assets/**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.francoischay.solarsystem3d"
+    },
+    "android": {
+      "package": "com.francoischay.solarsystem3d",
+      "edgeToEdgeEnabled": true
+    }
+  }
+}
