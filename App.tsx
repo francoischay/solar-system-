@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { createElement, useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
@@ -26,8 +26,19 @@ export default function App() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" translucent />
-      {uri ? (
+      <StatusBar style="light" />
+      {uri && Platform.OS === 'web' ? (
+        createElement('iframe', {
+          src: uri,
+          title: 'Système solaire 3D',
+          style: {
+            border: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: '#11143f',
+          },
+        })
+      ) : uri ? (
         <WebView
           source={{ uri }}
           style={styles.webview}
@@ -55,16 +66,16 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#070a24',
+    backgroundColor: '#11143f',
   },
   webview: {
     flex: 1,
-    backgroundColor: '#070a24',
+    backgroundColor: '#11143f',
   },
   loader: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#070a24',
+    backgroundColor: '#11143f',
   },
 });
