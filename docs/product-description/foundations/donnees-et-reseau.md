@@ -61,4 +61,4 @@ Ce que la liste standard signifie pour les données :
 - Celestrak peut répondre « data has not updated » au lieu de TLE ; le code garde alors la copie locale. Non observé en conditions réelles.
 - La troncature de Starlink à 600 membres se fait en octets sur le flux téléchargé ; le dernier TLE du lot peut être coupé et ignoré. Sans effet visible probable, non vérifié.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

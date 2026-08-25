@@ -4,7 +4,7 @@ Une description écrite de l'expérience utilisateur de l'app iOS « Système so
 
 ## Objet
 
-Du point de vue de l'utilisateur, l'app est un grand diagramme d'états. On s'y déplace avec des gestes tactiles : glissements à un ou deux doigts, pincements, torsions, taps, et quelques boutons. La majeure partie de ce comportement est définie implicitement, répartie entre la boucle de rendu SceneKit, les reconnaisseurs de gestes UIKit et les vues SwiftUI. Aucun endroit ne dit, en langage clair, « quand l'utilisateur fait X, voilà ce qui se passe, et voilà ce qui se passe s'il fait Y au milieu ».
+Du point de vue de l'utilisateur, l'app est un grand diagramme d'états. On s'y déplace avec des gestes tactiles : glissements à un ou deux doigts, pincements, taps, et quelques boutons. La majeure partie de ce comportement est définie implicitement, répartie entre la boucle de rendu SceneKit, les reconnaisseurs de gestes UIKit et les vues SwiftUI. Aucun endroit ne dit, en langage clair, « quand l'utilisateur fait X, voilà ce qui se passe, et voilà ce qui se passe s'il fait Y au milieu ».
 
 Ce projet est cet endroit. Il décrit l'expérience complète sur l'app native iOS (`native-ios/`), lancée sur iPhone, dans sa configuration par défaut, sans rien de personnalisé, en français.
 
@@ -86,6 +86,7 @@ L'avancement est suivi dans le [tableau de couverture](#couverture) ci-dessous.
 - **La géolocalisation est décrite dans les fondations** ([foundations/scene-et-objets.md](foundations/scene-et-objets.md)) et non dans un document propre : c'est un marqueur passif, sans interaction.
 - **Forme de l'interaction.** L'unité d'interaction est le geste tactile ; ses phases sont : le doigt se pose / levé sans mouvement / le geste s'engage / pendant le geste / le doigt se lève. La liste d'interruptions et l'ordre des préoccupations transverses sont figés tels qu'écrits plus haut.
 - **Règles en prose.** Ce sont des documents en prose, pas des spécifications numérotées. Les ancres de titres suffisent pour les renvois.
+- **Commit de référence.** Le code source vit dans le même dépôt git que ces documents ; le commit cité en pied de page est le dernier commit qui touche `native-ios/` (`git log -1 --format=%h -- native-ios/`), pas HEAD. Le code a bougé pendant la rédaction initiale (suppression du geste de torsion, limite d'élévation ramenée à 77°, fenêtre anti-élan de 0,5 s) : tous les documents décrivent l'état `bb3744e`.
 
 ## Structure
 
@@ -111,7 +112,7 @@ foundations/
 
 camera/
   orbite-libre.md                le glissement à un doigt : orbite autour de la cible, inertie  (PILOTE)
-  geste-compose.md               le geste à deux doigts : orientation + pincement + torsion simultanés
+  geste-compose.md               le geste à deux doigts : orientation + pincement simultanés
 
 selection/
   toucher-un-astre.md            le tap : priorités lune > sonde/satellite > planète, rayons de saisie, désélection
@@ -142,14 +143,14 @@ Le statut est `not started`, `drafted` ou `verified`.
 | foundations/scene-et-objets.md | drafted |
 | foundations/donnees-et-reseau.md | drafted |
 | camera/orbite-libre.md | drafted |
-| camera/geste-compose.md | not started |
+| camera/geste-compose.md | drafted |
 | selection/toucher-un-astre.md | drafted |
 | selection/cartouche.md | drafted |
-| timeline/glissement.md | not started |
-| timeline/echelle-et-aujourdhui.md | not started |
-| explorer/panneau.md | not started |
-| explorer/sondes.md | not started |
-| explorer/satellites.md | not started |
+| timeline/glissement.md | drafted |
+| timeline/echelle-et-aujourdhui.md | drafted |
+| explorer/panneau.md | drafted |
+| explorer/sondes.md | drafted |
+| explorer/satellites.md | drafted |
 | explorer/lancements.md | drafted |
 
 ## Référence

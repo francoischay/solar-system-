@@ -6,7 +6,7 @@ Un glissement à un doigt sur la scène fait tourner la caméra autour de sa cib
 
 ## Le cas simple
 
-L'utilisateur pose un doigt sur la scène et glisse vers la gauche : le système solaire tourne devant lui, comme s'il tournait autour du Soleil. Il glisse vers le haut : son point de vue s'élève au-dessus du plan des orbites, jusqu'à la vue de dessus s'il insiste — la caméra s'arrête juste avant la verticale exacte, l'image ne bascule jamais tête en bas.
+L'utilisateur pose un doigt sur la scène et glisse vers la gauche : le système solaire tourne devant lui, comme s'il tournait autour du Soleil. Il glisse vers le haut : son point de vue s'élève au-dessus du plan des orbites — la caméra s'arrête nettement avant la verticale (à environ 77°), l'image ne bascule jamais tête en bas.
 
 Il lâche l'écran en plein mouvement : la rotation continue dans la direction du geste, en ralentissant progressivement, puis s'arrête d'elle-même après une à deux secondes. S'il repose le doigt pendant cet élan, la rotation s'arrête net et suit de nouveau le doigt.
 
@@ -40,19 +40,18 @@ Le doigt se lève sans avoir bougé : c'est un tap, et c'est le geste de sélect
 Dès que le doigt se déplace d'environ dix points (le seuil de reconnaissance du système), le glissement commence. À cet instant :
 
 - toute visée de caméra programmée (un recadrage en cours vers une sonde, un satellite ou un pas de tir) est abandonnée là où elle en est — le doigt gagne toujours ;
-- tout élan résiduel d'un glissement précédent est remis à zéro ;
-- le roulis en cours, s'il y en avait un, reste tel quel (le glissement à un doigt ne touche pas au roulis).
+- tout élan résiduel d'un glissement précédent est remis à zéro.
 
 Rien n'est capturé d'autre que la position du doigt : le geste est incrémental, chaque déplacement s'ajoute à l'angle courant.
 
-> Note technique : l'abandon de visée ne concerne que l'orientation (azimut, élévation, roulis). Une animation de distance en cours — par exemple le rapprochement vers une planète qu'on vient de sélectionner — continue pendant le glissement. On peut donc orbiter pendant que la caméra plonge.
+> Note technique : l'abandon de visée ne concerne que l'orientation (azimut, élévation). Une animation de distance en cours — par exemple le rapprochement vers une planète qu'on vient de sélectionner — continue pendant le glissement. On peut donc orbiter pendant que la caméra plonge.
 
 ### Pendant le geste
 
 La caméra suit le doigt en continu, dans le sens naturel : glisser à gauche fait défiler la scène vers la droite du regard, glisser vers le haut élève le point de vue.
 
 - L'azimut tourne sans limite : on peut faire autant de tours qu'on veut.
-- L'élévation est bornée juste avant chaque pôle (à 0,025 radian de la verticale) : arrivé en butée, le doigt continue de glisser mais la vue ne monte plus.
+- L'élévation est bornée avant chaque pôle (à environ 77°) : arrivé en butée, le doigt continue de glisser mais la vue ne monte plus.
 - La cible reste rigoureusement au centre du cadre : si le temps défile en même temps (élan de timeline, transition de date), la caméra suit l'astre dans son déplacement orbital tout en tournant autour de lui.
 
 Rien d'autre ne bouge : la date, la sélection, la distance, le contenu du cartouche sont inchangés. Le geste ne peut pas sortir de l'écran — s'il atteint le bord, la rotation s'arrête simplement de progresser dans cette direction tant que le doigt n'en revient pas.
@@ -123,4 +122,4 @@ Après toute interruption, l'utilisateur reste exactement où il était : même 
 - La durée ressentie de l'élan (« une à deux secondes ») est calculée depuis la constante d'amortissement, pas chronométrée sur appareil.
 - Des traces de débogage (`print`) subsistent dans le code des gestes ; invisibles pour l'utilisateur, elles ne sont pas un défaut produit.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

@@ -27,7 +27,7 @@ Priorités : **P1** un fait établi dont beaucoup de documents dépendent, ou un
 
 ## Appareils et conditions
 
-- **simulateur** : le simulateur iOS (iPhone). Suffit pour presque tout ; les gestes se font à la souris (clic-glisser), le geste composé avec ⌥ (deux doigts symétriques) et ⌥⇧ (déplacement parallèle). La torsion à deux doigts est pénible mais possible en ⌥-glisser circulaire.
+- **simulateur** : le simulateur iOS (iPhone). Suffit pour presque tout ; les gestes se font à la souris (clic-glisser), le geste composé avec ⌥ (deux doigts symétriques, pincement) et ⌥⇧ (déplacement parallèle).
 - **appareil** : un iPhone réel. Requis pour ce qui touche au ressenti (élan, vivacité des gestes), au multi-touch réel (poser un deuxième doigt en plein glissement), au touch cancel système (appel entrant), et à la vraie géolocalisation.
 - **réseau coupé** : couper le réseau du Mac (le simulateur suit) ou activer le mode avion sur l'appareil *avant de lancer l'app*, pour tester les replis. Supprimer l'app d'abord si l'item exige des caches vides — un cache présent masque le repli.
 - **localisation refusée** : refuser l'autorisation à la première demande, ou la retirer dans Réglages > Confidentialité ; supprimer l'app pour re-déclencher la demande.

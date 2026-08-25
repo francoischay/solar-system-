@@ -116,4 +116,4 @@ Les taps étant instantanés, la colonne « pendant le geste » se réduit à l'
 - Avec le cartouche déplié à mi-écran et le panneau ouvert (jusqu'à ~420 points), la cohabitation sur les petits iPhone (panneau repoussé, écrasé ou hors écran ?) est à vérifier.
 - Incohérence relevée avec [Lancements](lancements.md) : son diagramme indique « rouvrir le panneau (le tir reste sélectionné) », alors que la réouverture passe par l'onglet Sondes et désélectionne donc le lancement (trajectoire effacée). À arbitrer lors de la passe de cohérence ; possible sujet de triage.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

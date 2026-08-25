@@ -26,16 +26,16 @@ Ne décris pas le code. Décris ce que l'utilisateur voit et fait. Le détail te
 - Casse de phrase pour tous les titres. Langue directe et concrète. Pas de flou, pas de marketing.
 - Énonce les comportements surprenants tels quels, avec la raison si le code ou un commentaire la donne. Si ça ressemble à un bug, dis-le en « Questions ouvertes » au lieu de le lisser.
 - Renvoie vers les autres documents par des liens relatifs au lieu de répéter leur contenu. Les fondations possèdent les seuils, les constantes et les définitions d'événements d'interruption ; ne les redonne pas, lie.
-- Chaque document se termine par « ## Questions ouvertes et vérification » listant ce qui a été lu dans le code sans être confirmé à la main, puis `Vérifié contre le dossier natif au commit \`ddd8314\`` (le `git rev-parse --short HEAD` courant si le code a bougé).
+- Chaque document se termine par « ## Questions ouvertes et vérification » listant ce qui a été lu dans le code sans être confirmé à la main, puis `Vérifié contre le dossier natif au commit \`bb3744e\`` (l'état du code fait foi : le dernier commit qui touche `native-ios/`, soit `git log -1 --format=%h -- native-ios/`).
 - Un diagramme Mermaid `stateDiagram-v2` par interaction, limité aux états traversés par l'utilisateur ; pas d'états de comptabilité interne.
 
 ## Faits établis (ne pas re-dériver, ne pas contredire)
 
 Fondations — gestes et caméra :
 
-- Le pan à un doigt oriente la caméra : azimut −0,007 rad/pt, élévation +0,005 rad/pt, élévation bornée à ±(π/2 − 0,025).
+- Le pan à un doigt oriente la caméra : azimut −0,007 rad/pt, élévation +0,005 rad/pt, élévation bornée à ±1,35 rad (≈ 77°).
 - L'élan du pan à un doigt est plafonné (±1,8 rad/s en azimut, ±1,35 en élévation) et décroît en exp(−5,2·t) ; il ne démarre que si aucun autre geste d'orientation n'est actif.
-- Le geste composé (2 doigts) combine orientation (précision 0,72), pincement et torsion, sans élan à la fin ; il annule immédiatement le pan à un doigt en cours (« prendre la main »).
+- Le geste composé (2 doigts) combine orientation (précision 0,72) et pincement, sans élan à la fin ; il annule immédiatement le pan à un doigt en cours (« prendre la main »). Il n'y a pas de geste de torsion : l'horizon reste toujours à plat. Aucun élan ne démarre pendant les 0,5 s qui suivent une activité à deux doigts (doigt qui traîne).
 - Le zoom borne la distance de caméra à [1,4 ; 560] ; sur une sonde sélectionnée il règle l'ampleur du cadrage [0,3 ; 3] au lieu de la distance.
 - Toute visée programmée de caméra (recadrage) est abandonnée dès qu'un geste d'orientation commence ; les visées rejoignent leur but par amortissement (temps caractéristique 0,48 s), la distance en 0,5 s, la cible en 0,42 s (0,58 s sans sélection).
 - Le tap ne déclenche jamais pendant un geste ; les gestes de scène se reconnaissent simultanément entre eux mais jamais avec le tap.
@@ -53,8 +53,8 @@ Fondations — scène et objets :
 
 - Compression log des distances héliocentriques : rayon de scène = 12 + log1p(UA)/log1p(30,07) × 88 ; autour de la Terre : Terre = 1,2, Lune à 3,1, altitude compressée en log1p((km − 6371)/400).
 - Sélection → distance d'arrivée : planète 42, lune 14, sonde 34 (puis cadrage sur la trajectoire), satellite 5 (constellation : cadrage moyen ×2,8, min 5), Terre depuis l'onglet Satellites 9, lancement 12 puis 10 puis 1,5 (plongée).
-- Les lunes ne sont visibles que si leur planète ou l'une d'elles est sélectionnée. Une sonde n'est visible que si (sélectionnée ou « afficher toutes ») et date dans sa période de validité (année de début à année de fin + 1). Un satellite n'est visible que si (sélectionné ou « afficher tous ») et lancé et TLE chargé.
-- Priorité du tap : lune (0) > sonde = satellite (1) > planète (2) ; à priorité égale, distance écran minimale ; rayon écran minimal 22 pt. Taper le vide = tout désélectionner (retour vue d'ensemble, roulis remis à zéro, distance 230).
+- Les lunes ne sont visibles que si leur planète ou l'une d'elles est sélectionnée. Une sonde n'est visible que si (sélectionnée ou « afficher toutes ») et date dans sa période de validité (de son départ à la fin de son année de fin : « 1977–2030 » disparaît au 1ᵉʳ janvier 2031). Un satellite n'est visible que si (sélectionné ou « afficher tous ») et lancé et TLE chargé.
+- Priorité du tap : lune (0) > sonde = satellite (1) > planète (2) ; à priorité égale, distance écran minimale ; rayon écran minimal 22 pt. Taper le vide = tout désélectionner (retour vue d'ensemble, distance 230).
 - Le globe terrestre est calé sur le temps sidéral (GMST) et incliné de 23,44° ; le point de géolocalisation (repli : Paris 48,8566/2,3522) est solidaire de sa rotation et pulse en continu.
 - Étiquettes : uniquement la sonde sélectionnée ou le satellite individuel sélectionné ; jamais les planètes, lunes ou constellations.
 

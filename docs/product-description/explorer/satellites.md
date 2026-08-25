@@ -155,4 +155,4 @@ Sans objet — tout est déclenché au tap. Le satellite reste sélectionné jus
 - Le libellé statique des métas avant chargement (« orbite basse »…) n'est visible que le temps du chargement ; sur les replis, quelques dixièmes de seconde à peine. Non observé.
 - L'élévation de la visée « du côté du satellite » est bornée (0,12 à 1,25 rad) : pour un satellite très au sud, la caméra reste légèrement au-dessus du plan — l'engin peut se retrouver bas dans le cadre. À vérifier.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

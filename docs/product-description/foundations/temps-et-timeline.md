@@ -93,4 +93,4 @@ Ce que chaque événement de la liste standard fait au temps :
 - Au pas Heure (fenêtre de 4,2 jours), le format n'affiche pas l'année : à cheval sur un changement d'année, la date affichée peut être ambiguë. À vérifier à la main ; possible choix assumé.
 - Le défilement au bord n'a pas de butée : on peut défiler indéfiniment vers le passé ou le futur, y compris vers des dates où les éphémérides n'ont plus de sens physique (les orbites restent calculées). Comportement assumé par le code, à confirmer comme choix produit.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

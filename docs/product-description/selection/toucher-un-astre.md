@@ -2,7 +2,7 @@
 
 ## Résumé
 
-Un tap sur la scène sélectionne l'astre touché : la caméra s'en approche, le cartouche prend son nom, et ce qui dépend de lui (lunes, trace, étiquette) apparaît. Un tap dans le vide désélectionne tout et rend la vue d'ensemble. Le tap est disponible partout et tout le temps, mais uniquement au repos : il ne se déclenche jamais pendant un glissement, un pincement ou une torsion, ni sur les éléments d'interface posés sur la scène.
+Un tap sur la scène sélectionne l'astre touché : la caméra s'en approche, le cartouche prend son nom, et ce qui dépend de lui (lunes, trace, étiquette) apparaît. Un tap dans le vide désélectionne tout et rend la vue d'ensemble. Le tap est disponible partout et tout le temps, mais uniquement au repos : il ne se déclenche jamais pendant un glissement ou un pincement, ni sur les éléments d'interface posés sur la scène.
 
 ## Le cas simple
 
@@ -36,7 +36,7 @@ C'est le tap entier — ce geste n'a pas de phase étendue. Au lever, l'app cher
 
 Si un astre est trouvé et qu'il n'est pas déjà sélectionné, il devient la sélection (voir « Le doigt se lève » ci-dessous pour ce que ça déclenche). **Retoucher l'astre déjà sélectionné ne fait rien** — ni désélection, ni rebond de caméra.
 
-Si rien n'est trouvé et que quelque chose était sélectionné — un astre ou un lancement —, tout est désélectionné : retour à la vue d'ensemble, roulis remis à zéro, caméra ramenée au centre à distance 230. Si rien n'était sélectionné, le tap dans le vide ne fait rien du tout.
+Si rien n'est trouvé et que quelque chose était sélectionné — un astre ou un lancement —, tout est désélectionné : retour à la vue d'ensemble, caméra ramenée au centre à distance 230. Si rien n'était sélectionné, le tap dans le vide ne fait rien du tout.
 
 ### Le geste s'engage
 
@@ -85,7 +85,7 @@ Après toute interruption, la sélection est exactement ce qu'elle était : le t
 
 ## Interactions avec les autres systèmes
 
-**Caméra et cadrage.** Le tap impose la distance d'arrivée du type sélectionné et, dans le vide, la vue d'ensemble complète (angle, roulis, distance). Il n'oriente jamais la caméra. Les amortissements sont dans [Gestes et caméra](../foundations/gestes-et-camera.md).
+**Caméra et cadrage.** Le tap impose la distance d'arrivée du type sélectionné et, dans le vide, la vue d'ensemble complète (angle et distance). Il n'oriente jamais la caméra. Les amortissements sont dans [Gestes et caméra](../foundations/gestes-et-camera.md).
 
 **Temps simulé.** Le tap ne touche jamais à la date — c'est la différence principale avec la sélection d'une sonde depuis la liste, qui peut déclencher une transition de date ([explorer/sondes.md](../explorer/sondes.md)).
 
@@ -106,7 +106,7 @@ Après toute interruption, la sélection est exactement ce qu'elle était : le t
 - **Toucher une constellation** : le nuage n'est pas touchable ; le tap traverse et touche ce qu'il y a derrière (souvent la Terre — les nuages l'entourent).
 - **Toucher pendant l'élan de la caméra** : l'élan continue pendant la sélection ; le tap ne l'arrête pas (seul un nouveau glissement le ferait).
 - **Toucher un astre pendant qu'un lancement est sélectionné** : la sélection d'astre change, mais le lancement reste sélectionné et la caméra reste cadrée sur sa trajectoire — voir [explorer/lancements.md](../explorer/lancements.md), c'est un cas limite documenté là.
-- **Tap dans le vide sans aucune sélection** : strictement rien — pas même une remise à zéro du roulis.
+- **Tap dans le vide sans aucune sélection** : strictement rien.
 
 ## Questions ouvertes et vérification
 
@@ -114,4 +114,4 @@ Après toute interruption, la sélection est exactement ce qu'elle était : le t
 - « Retoucher l'astre sélectionné ne fait rien » est lu dans le code (la sélection ne change que si elle diffère) ; à confirmer qu'aucun effet secondaire visible ne se produit.
 - Le tap qui traverse une constellation n'a pas été vérifié sur appareil.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

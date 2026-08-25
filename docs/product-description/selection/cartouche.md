@@ -107,4 +107,4 @@ Après toute interruption, la feuille est soit ouverte soit fermée — jamais e
 - Le tap sur l'en-tête d'une sonde déclenche la bascule même quand la feuille est ouverte ; le même tap au même endroit sert aussi à saisir le tirage. La cohabitation exacte (tap court vs. début de tirage) repose sur le seuil de deux points, à vérifier à la main.
 - La reconnaissance des dates est faite au rendu du texte ; un texte de lancement venu de l'API (en anglais) n'aura pratiquement jamais de liens de date reconnus (mois français uniquement). Comportement attendu, non vérifié.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

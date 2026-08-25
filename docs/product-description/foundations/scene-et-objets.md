@@ -27,7 +27,7 @@ Les tailles des corps sont elles aussi symboliques (la Terre fait 1,2, Jupiter 2
 
 Règles de visibilité qui surprennent :
 
-- **La période de validité d'une sonde court de son année de départ à son année de fin + 1** : une sonde « 1977–2030 » disparaît au 1ᵉʳ janvier 2032. Hors période, la sonde n'existe pas — ni visible, ni touchable ; si elle était sélectionnée, la sélection reste (titre et texte au cartouche) mais la caméra revient à la vue d'ensemble.
+- **La période de validité d'une sonde court de son départ à la fin de son année de fin** : une sonde « 1977–2030 » reste visible tout 2030 et disparaît au 1ᵉʳ janvier 2031. Hors période, la sonde n'existe pas — ni visible, ni touchable ; si elle était sélectionnée, la sélection reste (titre et texte au cartouche) mais la caméra revient à la vue d'ensemble.
 - **Un satellite « pas encore lancé » à la date simulée n'existe pas non plus** ; la ligne de sa liste affiche « lancé en {année} ». Une constellation dont aucun membre n'est lancé affiche « aucun de ces satellites à cette date ».
 - **Les orbites des planètes sont toujours dessinées** (très discrètement) ; celles des lunes n'apparaissent qu'avec elles ; celle d'un satellite individuel n'apparaît qu'avec lui ; les constellations n'ont pas d'orbites dessinées.
 
@@ -45,7 +45,7 @@ Sélectionner un corps amène la caméra à une distance d'arrivée propre au ty
 | Terre via l'onglet Satellites | 9 | Aucune |
 | Lancement | 12, puis 10 (recul), puis 1,5 (plongée) | Vers le pas de tir, tel qu'il sera orienté à la date du tir |
 
-La vue d'ensemble (après un tap dans le vide) est à 230, cible au centre, roulis remis à zéro.
+La vue d'ensemble (après un tap dans le vide) est à 230, cible au centre, horizon à plat.
 
 ## Le globe terrestre
 
@@ -72,7 +72,7 @@ Sans objet : ce document ne décrit pas une interaction. Les règles ci-dessus *
 
 Ce que la liste standard signifie pour le contenu de la scène :
 
-- **Taper le vide** : vue d'ensemble — désélection totale (astre et lancement), lunes cachées, trace de sonde éteinte, étiquette éteinte, roulis à zéro, distance 230.
+- **Taper le vide** : vue d'ensemble — désélection totale (astre et lancement), lunes cachées, trace de sonde éteinte, étiquette éteinte, distance 230.
 - **Un deuxième doigt se pose** : sans effet sur le contenu.
 - **Une transition de date démarre** : le contenu suit la date — des sondes et satellites peuvent apparaître ou disparaître pendant le voyage.
 - **Le système annule le toucher / l'app passe en arrière-plan** : le contenu est figé tel quel et retrouvé tel quel ; les chargements réseau en cours continuent ou reprennent silencieusement.
@@ -87,4 +87,4 @@ Ce que la liste standard signifie pour le contenu de la scène :
 - La demande d'autorisation de localisation part à l'apparition de l'écran, avant tout geste ; le texte système affiché dépend de la configuration du projet et n'a pas été vérifié.
 - Les 520 étoiles sont un décor aléatoire regénéré à chaque lancement ; le ciel n'est pas le vrai ciel. Choix assumé, non signalé à l'utilisateur.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

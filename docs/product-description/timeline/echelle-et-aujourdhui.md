@@ -114,4 +114,4 @@ stateDiagram-v2
 - L'apparition et la disparition du bouton « Aujourd'hui » sont déclarées en fondu, mais le changement d'état vient de la boucle de rendu sans animation explicite : l'effet réel (fondu ou apparition sèche) est à vérifier à l'œil sur l'app.
 - Le retour visuel d'appui des lignes du menu et du bouton « Aujourd'hui » (assombrissement standard) est déduit du style de bouton par défaut, pas observé.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

@@ -23,8 +23,8 @@ stateDiagram-v2
     recul --> plongee : 0,9 s (la date voyage encore)
     plongee --> ascension : 1,6 s après le tap (mise à feu)
     ascension --> tir_affiche : 3,4 s d'ascension (trajectoire complète)
-    tir_affiche --> liste : rouvrir le panneau (le tir reste sélectionné)
-    tir_affiche --> [*] : tap dans le vide, autre onglet, fermeture du panneau (tout s'efface)
+    tir_affiche --> liste : rouvrir le panneau (il s'ouvre sur Sondes — le tir s'efface, la Terre reste sélectionnée)
+    tir_affiche --> [*] : tap dans le vide (tout s'efface, vue d'ensemble)
 ```
 
 ### Le doigt se pose
@@ -57,14 +57,14 @@ L'ascension ne se joue qu'une fois par sélection : arrivée en haut, la traject
 
 ### Le doigt se lève
 
-Sans objet — tout est déclenché au tap. Ce qui met fin à l'état « tir affiché » : un tap dans le vide (tout s'efface, vue d'ensemble), le passage à un autre onglet du panneau, ou la fermeture du panneau — ces deux derniers effacent la trajectoire mais gardent la Terre sélectionnée. Retoucher la même ligne dans la liste rejoue la séquence entière depuis le recul.
+Sans objet — tout est déclenché au tap. Ce qui met fin à l'état « tir affiché » : un tap dans le vide (tout s'efface, vue d'ensemble), ou la simple réouverture du panneau — le bouton Explorer rouvre toujours sur l'onglet Sondes, et quitter l'onglet Lancements efface la trajectoire en gardant la Terre sélectionnée. Pour retoucher la même ligne (ce qui rejoue la séquence entière depuis le recul), il faut donc d'abord revenir à l'onglet Lancements, ce qui a déjà effacé le tir.
 
 ## Variantes
 
 | Variante | Au moment du tap | Pendant la séquence |
 | --- | --- | --- |
 | Sélection courante | Remplacée par la Terre quel que soit l'état précédent ; une trace de sonde affichée s'éteint. | Toucher un astre change la sélection mais pas le cadrage — voir Cas limites. |
-| Panneau Explorer ouvert | Il l'est forcément (la liste y vit) ; il se ferme au tap. | Le rouvrir n'interrompt rien ; y repasser sur un autre onglet efface le tir. |
+| Panneau Explorer ouvert | Il l'est forcément (la liste y vit) ; il se ferme au tap. | Le rouvrir efface le tir : le bouton Explorer rouvre sur l'onglet Sondes, et quitter Lancements désélectionne le lancement. |
 | Cartouche déplié | Se replie (changement de sélection). | Peut être déplié pour lire la mission ; le cadrage se décale vers le haut normalement. |
 | Échelle de temps choisie | Aucun effet : la transition de date est identique à tous les pas. | Aucun effet. |
 
@@ -114,4 +114,4 @@ Sans objet — tout est déclenché au tap. Ce qui met fin à l'état « tir aff
 - Le comportement au retour d'arrière-plan en pleine séquence (saut sur l'horloge réelle) est déduit, non observé.
 - La liste ne se rafraîchit qu'au lancement de l'app : une session laissée ouverte montre des comptes à rebours justes sur des tirs périmés (déjà partis, reportés). Recoupe la question ouverte de [Données et réseau](../foundations/donnees-et-reseau.md).
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

@@ -56,6 +56,12 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 
 **Le menu d'échelle.** Le menu ouvert par le bouton de droite du dock : Heure, Jour, Mois, Année. Il fixe le *pas* de la timeline : la fenêtre de temps que représente la hauteur de la course de la poignée (4,2 jours, 100 jours, 3 044 jours, 36 525 jours).
 
+**Bascule « afficher ».** L'interrupteur en bas d'une liste du panneau Explorer (« Afficher toutes les sondes », « Afficher tous les satellites ») : allumé, tous les objets de la liste existant à la date simulée apparaissent dans la scène. Il ne change ni la sélection, ni la caméra, ni la date, et repart éteint à chaque lancement de l'app.
+
+**La note du panneau Satellites.** La ligne discrète sous la bascule de l'onglet Satellites, seul endroit de l'app qui parle de l'état des données : « Chargement des éléments orbitaux… », « Propagation SGP4 · TLE du {date} » ou « Positions indicatives · loin du TLE du {date} ».
+
+**Méta.** La seconde ligne d'une entrée de liste du panneau Explorer (altitude · inclinaison, effectif d'une constellation, période de validité, site · lanceur), recalculée avec la date simulée.
+
 **Étiquette.** Le badge nommé qui suit à l'écran la sonde ou le satellite individuel sélectionné. Les planètes n'ont pas d'étiquette.
 
 ## Le temps
@@ -76,9 +82,7 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 
 **Geste à un doigt.** Le glissement à un doigt sur la scène : il fait orbiter la caméra autour de la cible (azimut et élévation), avec élan au lever du doigt.
 
-**Geste composé.** La manipulation à deux doigts : orientation (glissement, précision réduite à 72 %), zoom (pincement) et roulis (torsion), disponibles simultanément dans un même mouvement continu. Le geste composé s'arrête avec les doigts : il n'a jamais d'élan.
-
-**Roulis.** La rotation de l'image autour de l'axe de visée, commandée par la torsion à deux doigts. Manipulation directe, sans inertie ; remis à zéro au retour à la vue d'ensemble.
+**Geste composé.** La manipulation à deux doigts : orientation (glissement, précision réduite à 72 %) et zoom (pincement), disponibles simultanément dans un même mouvement continu. Le geste composé s'arrête avec les doigts : il n'a jamais d'élan. Il n'y a pas de geste de torsion : l'horizon reste toujours à plat.
 
 **Zoom.** Le pincement. Sur une sonde sélectionnée, il ne change pas la distance de caméra mais l'ampleur du cadrage de sa trajectoire (de 0,3× à 3×) ; partout ailleurs, il change la distance de caméra (1,4 à 560).
 
@@ -92,7 +96,7 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 
 ## Événements qui terminent ou interrompent un geste
 
-**Terminer.** Le doigt (ou les doigts) se lève : le geste s'achève normalement. Pour le geste à un doigt, l'élan démarre ; pour le geste composé et la torsion, tout s'arrête net ; pour la poignée, l'élan de timeline démarre.
+**Terminer.** Le doigt (ou les doigts) se lève : le geste s'achève normalement. Pour le geste à un doigt, l'élan démarre ; pour le geste composé, tout s'arrête net ; pour la poignée, l'élan de timeline démarre.
 
 **Interrompre.** Le système retire le toucher à l'app (appel entrant, centre de contrôle, geste système de bord d'écran) : le geste s'arrête là où il en est, sans élan. Rien n'est annulé rétroactivement — la caméra ou la date restent où le geste les a laissées.
 

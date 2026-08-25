@@ -13,12 +13,11 @@ Cinq reconnaisseurs sont posés sur la scène, et seulement sur elle — le dock
 | Glissement | 1 | Oriente la caméra (azimut, élévation), avec élan |
 | Glissement | 2 | Oriente la caméra, précision réduite à 72 %, sans élan |
 | Pincement | 2 | Zoom (distance de caméra), ou ampleur du cadrage sur une sonde |
-| Torsion | 2 | Roulis, manipulation directe sans élan |
 | Tap | 1 | Sélection d'un astre, ou désélection dans le vide |
 
 ## L'arbitrage : qui prend la main sur qui
 
-- **Tous les gestes de scène se reconnaissent simultanément entre eux, sauf le tap.** À deux doigts, on peut orienter, zoomer et rouler dans un même mouvement continu : c'est le *geste composé*. Le tap, lui, ne se combine avec rien : il ne déclenche que si aucun autre geste n'est en cours.
+- **Tous les gestes de scène se reconnaissent simultanément entre eux, sauf le tap.** À deux doigts, on peut orienter et zoomer dans un même mouvement continu : c'est le *geste composé*. Il n'y a pas de geste de torsion : l'horizon reste toujours à plat. Le tap, lui, ne se combine avec rien : il ne déclenche que si aucun autre geste n'est en cours.
 - **Le glissement à un doigt ne s'engage jamais pendant une manipulation à deux doigts.** Si les deux doigts sont déjà posés, un mouvement d'un seul d'entre eux ne compte pas comme glissement à un doigt.
 - **Un deuxième doigt posé pendant un glissement à un doigt l'annule immédiatement**, sans élan, et le geste composé continue seul. C'est *prendre la main* (voir le glossaire). L'inverse n'existe pas : lever un doigt du geste composé ne rend pas la main au glissement à un doigt — il faut tout lever et recommencer.
 
@@ -26,17 +25,16 @@ Cinq reconnaisseurs sont posés sur la scène, et seulement sur elle — le dock
 
 ## Le rig de caméra
 
-La caméra orbite autour d'une *cible* (voir le glossaire) décrite par quatre nombres : azimut, élévation, roulis, distance.
+La caméra orbite autour d'une *cible* (voir le glossaire) décrite par trois nombres : azimut, élévation, distance. L'horizon reste toujours à plat.
 
 - **Azimut** : libre, sans borne, sensibilité 0,007 radian par point de glissement (0,005 par point à deux doigts, soit 72 %).
-- **Élévation** : bornée à ±(π/2 − 0,025) radians — la caméra s'arrête à 0,025 radian de la verticale et l'image ne bascule jamais. Sensibilité 0,005 radian par point (0,0036 à deux doigts).
-- **Roulis** : libre, commandé par la torsion uniquement, remis à zéro au retour à la vue d'ensemble (tap dans le vide). Aucune inertie.
+- **Élévation** : bornée à ±1,35 radian (≈ 77°) — la caméra s'arrête nettement avant les pôles ; l'image ne bascule jamais et ne s'approche pas assez de la verticale pour que le déplacement horizontal se change en rotation de la vue sur elle-même (la raison est donnée en commentaire dans le code).
 - **Distance** : bornée à [1,4 ; 560] unités de scène. La vue d'ensemble est à 230. Le pincement la règle ; chaque sélection impose sa distance d'arrivée (voir [Scène et objets](scene-et-objets.md)).
 
 ## Élan et amortissements
 
 - **Élan du glissement à un doigt** : au lever du doigt, la vitesse du geste devient vitesse de rotation, plafonnée à ±1,8 rad/s en azimut et ±1,35 rad/s en élévation, puis décroît en exp(−5,2·t) — il en reste ~7 % après une demi-seconde. L'élan ne démarre que si aucun autre geste d'orientation n'est actif au moment du lever, et jamais pendant les 0,5 s qui suivent une activité à deux doigts (un *doigt qui traîne* ne lance pas la scène). Arrivé à la butée d'élévation, la composante verticale de l'élan s'annule.
-- **Visées programmées** : quand l'app oriente elle-même la caméra (sélection depuis une liste, séquence de tir), azimut, élévation et roulis rejoignent leur but par un amortissement critique de temps caractéristique 0,48 s — vite au début, doux à l'arrivée, sans dépassement. La visée est déclarée atteinte (et abandonnée) quand l'écart et la vitesse deviennent négligeables.
+- **Visées programmées** : quand l'app oriente elle-même la caméra (sélection depuis une liste, séquence de tir), azimut et élévation rejoignent leur but par un amortissement critique de temps caractéristique 0,48 s — vite au début, doux à l'arrivée, sans dépassement. La visée est déclarée atteinte (et abandonnée) quand l'écart et la vitesse deviennent négligeables.
 - **Distance** : amortie vers son but en 0,5 s, en continu — un changement de but en cours de route conserve la vitesse acquise.
 - **Cible** : amortie en 0,42 s vers l'astre suivi (0,58 s vers le centre quand il n'y a plus de sélection). Quand l'astre suivi se déplace parce que le temps défile, la caméra reçoit exactement le même déplacement : l'astre reste verrouillé dans le cadre pendant le défilement, l'amortissement ne sert qu'aux changements de cible.
 
@@ -60,7 +58,7 @@ Les variantes du squelette (sélection courante, panneau ouvert, cartouche dépl
 
 Les définitions valent pour tous les documents de geste :
 
-- **Taper le vide** : n'est possible qu'au repos (le tap ne se reconnaît pas pendant un geste). Désélectionne tout, remet le roulis à zéro, renvoie la caméra au centre à distance 230.
+- **Taper le vide** : n'est possible qu'au repos (le tap ne se reconnaît pas pendant un geste). Désélectionne tout et renvoie la caméra au centre à distance 230.
 - **Un deuxième doigt se pose** : annule le glissement à un doigt sans élan ; le geste composé prend la main.
 - **Une transition de date démarre** : ne peut venir que d'un bouton ou d'une liste, donc jamais pendant un geste de scène. Elle ne touche pas à la caméra (sauf si la même action programme aussi une visée, comme la sélection d'un lancement).
 - **Le système annule le toucher** (appel, centre de contrôle, geste de bord) : le geste en cours s'arrête là où il en est, sans élan. Rien n'est annulé rétroactivement.
@@ -76,4 +74,4 @@ Les définitions valent pour tous les documents de geste :
 - Le comportement du pincement quand la sélection change *pendant* le pincement (possible seulement si une transition de date fait apparaître ou disparaître une sonde) n'est pas couvert par le code de façon explicite ; non observé.
 - Des traces de débogage (`print`) subsistent dans les gestes ; sans effet utilisateur.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

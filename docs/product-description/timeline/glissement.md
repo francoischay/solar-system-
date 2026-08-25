@@ -125,4 +125,4 @@ Après toute interruption, la date reste exactement où le geste l'a laissée : 
 - Au retour d'arrière-plan, l'élan reprend par pas de rendu plafonnés (il est quasi suspendu pendant l'absence) alors qu'une transition court sur l'horloge réelle ; la nuance avec la formulation des fondations est à trancher par l'observation.
 - La vitesse ressentie du défilement au bord (« un dixième de fenêtre par seconde ») est calculée, pas chronométrée.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.

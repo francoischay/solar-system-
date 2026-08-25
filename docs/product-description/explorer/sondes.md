@@ -10,9 +10,13 @@ L'utilisateur ouvre le panneau Explorer, onglet Sondes, et touche « Voyager 1 �
 
 Un pincement ne rapproche pas la caméra comme ailleurs : il règle l'*ampleur* du cadrage de la trace, de 0,3× (serré sur la sonde) à 3× (large autour de la route) — voir [le geste composé](../camera/geste-compose.md) et [Gestes et caméra](../foundations/gestes-et-camera.md).
 
+### La bascule « Afficher toutes les sondes »
+
+Sous la grille, un interrupteur. Activé, toutes les sondes valides à la date courante apparaissent dans la scène, chacune à sa position, dans sa couleur — sans trace, sans étiquette, à taille normale (seule la sonde sélectionnée est grossie et tracée). L'effet est immédiat et visible derrière le panneau, qui reste ouvert : la bascule ne sélectionne rien et ne ferme rien. Désactivée, seule la sonde sélectionnée reste visible. La bascule ne touche ni à la date, ni à la caméra, ni à la sélection.
+
 ### Les 26 sondes
 
-La liste montre exactement ceci : le nom et la période, rien d'autre. La forme de la trajectoire — donc de la trace — dépend du type de route de chaque sonde :
+Treize rangées de deux : la grille dépasse la hauteur du panneau et défile verticalement, la bascule tout en bas. La liste montre exactement ceci : le nom et la période, rien d'autre. La forme de la trajectoire — donc de la trace — dépend du type de route de chaque sonde :
 
 | Type de trajectoire | Sondes | Trace affichée |
 | --- | --- | --- |
@@ -20,7 +24,7 @@ La liste montre exactement ceci : le nom et la période, rien d'autre. La forme 
 | Boucle héliocentrique périodique | Parker Solar Probe, Solar Orbiter, Lucy, Rosetta, OSIRIS-APEX | La dernière révolution seulement |
 | Boucle locale autour d'un parent | Juno (Jupiter), Tianwen-1 (Mars), Mars Express (Mars), Akatsuki (Vénus), JWST (Terre) | La dernière révolution autour du parent |
 
-Les périodes affichées vont de « 1972–2030 » (Pioneer 10) à « 2024–2034 » (Europa Clipper). Le jeu de données distingue des missions actives et historiques, mais la liste ne montre aucune différence entre elles.
+Les périodes affichées vont de « 1972–2030 » (Pioneer 10) à « 2024–2034 » (Europa Clipper). Le jeu de données distingue des missions actives et historiques, mais la liste ne montre aucune différence entre elles. La ligne de la sonde sélectionnée est surlignée en clair ; comme la sélection ferme le panneau, ce surlignage ne se voit qu'en rouvrant l'onglet ensuite.
 
 ## L'interaction, événement par événement
 
@@ -44,8 +48,10 @@ Sur une ligne de la grille : la ligne prend l'aspect enfoncé du bouton. Rien d'
 C'est ici que tout se joue — pour une ligne de liste, le tap *est* l'action. Dans l'ordre :
 
 1. **Recadrage de date, si nécessaire.** Si la date simulée est déjà dans la période de la sonde, rien ne bouge. Sinon, une [transition de date](../foundations/temps-et-timeline.md) de 0,95 seconde démarre : vers aujourd'hui si aujourd'hui est dans la période ; sinon vers la borne la plus proche — la date de départ réelle de la mission si la date simulée est avant, le 31 décembre de l'année de fin si elle est après. La poignée est déposée à sa position de repos (62 %).
-2. **Visée caméra.** L'azimut et l'élévation rejoignent par amortissement un angle calculé sur la position de la sonde à la date d'arrivée : la caméra se place de côté par rapport à la ligne Soleil–sonde, environ 24° au-dessus du plan. Le roulis n'est pas touché. Un geste d'orientation de l'utilisateur abandonne cette visée à tout moment.
-3. **Sélection.** La sonde devient la sélection courante (elle remplace la précédente) ; le cartouche prend son nom et sa période ; le panneau Explorer se ferme.
+2. **Visée caméra.** L'azimut et l'élévation rejoignent par amortissement un angle calculé sur la position de la sonde à la date d'arrivée : la caméra se place de côté par rapport à la ligne Soleil–sonde, environ 24° au-dessus du plan. Un geste d'orientation de l'utilisateur abandonne cette visée à tout moment.
+3. **Sélection.** La sonde devient la sélection courante (elle remplace la précédente) ; le cartouche prend son nom en titre et sa période en sous-titre ; le panneau Explorer se ferme.
+
+Pendant le voyage de date éventuel, la scène défile comme sous un élan de timeline : les planètes laissent leurs traces de défilement, et des sondes ou satellites peuvent apparaître ou disparaître en route. La sonde visée elle-même n'apparaît qu'une fois la date entrée dans sa période — sur la fin du voyage, donc, quand on venait de loin.
 
 > Note technique : l'azimut visé est perpendiculaire à la direction Soleil–sonde (un quart de tour d'écart), ce qui présente la route de profil plutôt que dans l'axe. La borne de fin visée par le recadrage est un jour avant le 1ᵉʳ janvier de l'année de fin + 1 — dans la période, avec un jour de marge.
 
@@ -67,7 +73,9 @@ Une fois la sonde sélectionnée, et tant qu'elle l'est :
 
 - **La trace** — sa trajectoire parcourue, du départ (ou de sa dernière révolution si elle boucle) à la date simulée — est affichée en permanence, dans la couleur de la sonde, bien plus opaque que les traces de défilement. Elle se recalcule à chaque changement de date : reculer dans le temps la raccourcit, avancer l'allonge.
 - **Le cadrage** suit la trace, pas la sonde : la caméra vise le centre de la boîte englobante de la trace et sa distance est recalculée en continu pour que la trace tienne dans l'écran (jamais plus près que 3), multipliée par l'ampleur choisie au pincement (0,3–3, remise à 1 à chaque changement de sélection).
-- **L'étiquette** nommée suit la sonde à l'écran ; la sonde est dessinée un peu plus grosse que ses voisines et à taille d'écran à peu près constante quelle que soit la distance.
+- **L'étiquette** nommée suit la sonde à l'écran ; elle s'éteint quand la sonde sort du cadre ou passe derrière la caméra, et se rallume à son retour. La sonde est dessinée un peu plus grosse que ses voisines et à taille d'écran à peu près constante quelle que soit la distance.
+
+La visée d'orientation est calculée sur la position de la sonde *à la date d'arrivée* du recadrage, pas à la date de départ : caméra et date voyagent vers le même rendez-vous et y arrivent à peu près ensemble (0,95 s pour la date, un amortissement du même ordre pour la caméra).
 
 ## Variantes
 
@@ -97,7 +105,7 @@ Une fois la sonde sélectionnée, et tant qu'elle l'est :
 
 **Temps simulé.** Ce document possède le recadrage de date à la sélection d'une sonde : période respectée, aujourd'hui préféré, borne la plus proche sinon, transition de 0,95 s ([Temps et timeline](../foundations/temps-et-timeline.md)). La trace suit ensuite la date en continu. La bascule début/fin de mission — taper l'en-tête du cartouche d'une sonde pour sauter à son départ puis à sa fin — appartient au [cartouche](../selection/cartouche.md).
 
-**Sélection.** Sélectionner une sonde remplace la sélection courante et ferme le panneau. Les sondes rendues visibles par « Afficher toutes les sondes » sont aussi sélectionnables au tap dans la scène — priorités et rayons dans [Toucher un astre](../selection/toucher-un-astre.md).
+**Sélection.** Sélectionner une sonde remplace la sélection courante et ferme le panneau. Les sondes rendues visibles par « Afficher toutes les sondes » sont aussi sélectionnables au tap dans la scène — priorités et rayons dans [Toucher un astre](../selection/toucher-un-astre.md) — mais seule la sélection *depuis la liste* déclenche le recadrage de date et la visée caméra : taper une sonde dans la scène la sélectionne là où elle est, sans bouger ni la date ni l'angle de vue (la trace et son cadrage de distance s'allument dans les deux cas).
 
 **Réseau et replis.** Aucune interaction : routes, orbites et périodes sont embarquées.
 
@@ -117,6 +125,10 @@ Une fois la sonde sélectionnée, et tant qu'elle l'est :
 - **Les sondes qui bouclent** (héliocentriques et locales) ne montrent jamais leur route d'approche : Juno sélectionnée montre sa dernière révolution autour de Jupiter, pas son voyage Terre–Jupiter.
 - **Reculer la date jusqu'au départ d'une sonde à route** raccourcit sa trace jusqu'à un point ; le cadrage se resserre en continu (jamais sous 3 de distance).
 - **La trace s'arrête à la fin de la période** même si la route du jeu de données continue au-delà (les Voyager ont des points de route jusqu'en 2032, la trace s'arrête au 1ᵉʳ janvier 2031).
+- **Les sondes n'ont pas d'orbite dessinée** : contrairement aux planètes, aux lunes et aux satellites individuels, une sonde ne montre jamais son ellipse complète — seulement sa position, et sa trace si elle est sélectionnée. « Afficher toutes les sondes » n'allume donc que des points, pas des routes.
+- **Arriver de l'onglet Lancements** : passer à l'onglet Sondes désélectionne le lancement en cours et éteint sa trajectoire, mais laisse la Terre sélectionnée — sélectionner une sonde remplace ensuite cette sélection normalement.
+- **Sélectionner une sonde locale** (Juno, JWST…) cadre sa boucle autour du parent : la caméra plonge près de la planète, bien plus près que la distance d'arrivée d'une sonde interplanétaire.
+- **Deux recadrages qui se croisent** : sélectionner une sonde pendant la transition de date d'une autre sélection remplace la transition en route — la date repart de là où elle en était vers la nouvelle cible, toujours en 0,95 s.
 
 ## Questions ouvertes et vérification
 
@@ -127,4 +139,4 @@ Une fois la sonde sélectionnée, et tant qu'elle l'est :
 - Le retour amorti à la vue d'ensemble quand la sonde suivie sort de sa période est déduit du code (mêmes amortissements que toute visée) ; l'effet ressenti est à vérifier — question déjà ouverte dans [Scène et objets](../foundations/scene-et-objets.md).
 - L'ordre de tri de la grille entre deux sondes au départ identique (Solar Orbiter et Tianwen-1, toutes deux 2020) n'est pas garanti par le code ; l'ordre observé est à noter à la vérification.
 
-Vérifié contre le dossier natif au commit `ddd8314`.
+Vérifié contre le dossier natif au commit `bb3744e`.
