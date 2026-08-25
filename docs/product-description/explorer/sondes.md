@@ -83,7 +83,7 @@ La visée d'orientation est calculée sur la position de la sonde *à la date d'
 | --- | --- | --- |
 | Sélection courante | Toucher une autre sonde remplace la sélection (ampleur remise à 1, [bascule début/fin](../selection/cartouche.md) remise à « début »). Toucher la sonde déjà sélectionnée rejoue la sélection : recadrage de date éventuel, re-visée, fermeture du panneau — mais l'ampleur et la bascule début/fin sont conservées. | Sans objet — le défilement de la liste ne sélectionne rien. |
 | Panneau Explorer ouvert | Précondition : la liste vit dans le panneau. La sélection le ferme ; le défilement le laisse ouvert. | Aucun effet. |
-| Cartouche déplié | La sélection ne replie pas le cartouche : il affiche le texte de la nouvelle sonde, et le cadrage reste décalé vers la moitié haute (voir [le cartouche](../selection/cartouche.md)). | Aucun effet. |
+| Cartouche déplié | Changer de sonde replie le cartouche (tout changement de titre le replie — voir [le cartouche](../selection/cartouche.md)) ; retoucher la sonde déjà sélectionnée le laisse déplié. | Aucun effet. |
 | Échelle de temps choisie | Aucun effet sur la sélection elle-même ; le pas ne change que la fenêtre recalculée autour de la date d'arrivée du recadrage. | Aucun effet. |
 
 ## Annulation et interruption
