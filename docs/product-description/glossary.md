@@ -84,6 +84,10 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 
 **Suivi direct.** Le mode de manipulation où la valeur suit exactement le doigt, sans lissage ni inertie tant que le doigt reste posé : la poignée de timeline et le tirage du cartouche sont en suivi direct ; l'orientation de caméra, amortie et dotée d'élan, ne l'est pas.
 
+**Ampleur du cadrage.** Le facteur, entre 0,3× et 3×, appliqué au cadrage automatique de la trajectoire d'une sonde sélectionnée. Réglé par le pincement à la place de la distance de caméra ; remis à 1 à chaque changement de sonde.
+
+**Doigt qui traîne.** Le doigt restant après un geste à deux doigts : pendant une demi-seconde après toute activité à deux doigts, un lever de doigt ne déclenche jamais d'élan, pour qu'un doigt qui s'attarde ne « lance » pas la scène.
+
 **Rayon de saisie.** La zone tactile d'un astre, plus large que son dessin : au moins 22 points d'écran, davantage pour les gros corps. En cas de chevauchement, la priorité est : lune, puis sonde ou satellite, puis planète ; à priorité égale, le plus proche du doigt.
 
 ## Événements qui terminent ou interrompent un geste

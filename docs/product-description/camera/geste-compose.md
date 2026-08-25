@@ -12,6 +12,8 @@ Tout se fait en même temps, sans mode ni ordre imposé : le mouvement des doigt
 
 > Note technique : les trois composantes sont trois reconnaisseurs distincts autorisés à se reconnaître simultanément, chacun livrant ses deltas image par image. C'est ce qui rend la combinaison continue possible — et c'est aussi pourquoi le geste composé ne doit jamais avoir d'élan : les vitesses de plusieurs reconnaisseurs ne doivent jamais s'additionner.
 
+Si une sonde est sélectionnée, le même écartement des doigts ne rapproche pas la caméra : il resserre le cadrage sur la trajectoire de la sonde. L'app garde le contrôle de la distance — elle cadre la trajectoire parcourue en entier — et le pincement dit seulement « plus serré » ou « plus large », entre 0,3× et 3×.
+
 Il lève les doigts : tout s'arrête exactement là où le geste l'a laissé. Pas de rotation résiduelle, pas de zoom qui continue — la manipulation est directe de bout en bout.
 
 ## L'interaction, événement par événement
@@ -22,9 +24,10 @@ stateDiagram-v2
     repos --> poses : deux doigts se posent
     poses --> repos : levés sans mouvement (rien)
     poses --> compose : une composante dépasse son seuil (déplacement, écartement ou torsion)
+    orbiteLibre --> compose : un deuxième doigt se pose (prendre la main, sans élan)
     compose --> compose : orientation, zoom et roulis se mettent à jour en continu
     compose --> repos : les doigts se lèvent (arrêt net, sans élan)
-    repos --> compose : un deuxième doigt se pose pendant un glissement à un doigt (prendre la main)
+    note left of orbiteLibre : glissement à un doigt en cours (voir orbite libre)
 ```
 
 ### Les doigts se posent
@@ -119,6 +122,8 @@ Comme pour l'orbite libre, aucun état partiel n'existe : un geste composé inte
 - **Tordre plusieurs tours** : le roulis suit sans limite ; l'angle est replié en interne (±180°), sans effet visible.
 - **Lever un doigt et continuer avec l'autre** : le doigt restant ne reprend pas l'orbite libre en cours de route, et ses derniers mouvements ne créent pas d'élan (fenêtre d'une demi-seconde après le geste à deux doigts). Pour retrouver l'élan, lever tout et recommencer un glissement à un doigt.
 - **Poser les deux doigts l'un après l'autre** : le premier peut engager un glissement à un doigt une fraction de seconde ; il est annulé sans élan dès que le geste composé s'engage. À l'œil, la transition est invisible.
+- **Pincer pendant qu'un lancement est sélectionné** : sans effet. Tant que le lancement est sélectionné (pendant la séquence de tir et après), l'app impose la distance de caméra à chaque image — le pincement la règle, mais elle est aussitôt reprise. Orientation et roulis, eux, répondent normalement : on peut regarder le tir sous l'angle qu'on veut, pas à la distance qu'on veut. Signalé comme défaut possible.
+- **Geste composé pendant l'élan de la timeline** : les planètes se déplacent pendant qu'on tourne, zoome et roule autour d'elles ; l'astre suivi reste centré.
 
 ## Questions ouvertes et vérification
 
@@ -130,6 +135,7 @@ Comme pour l'orbite libre, aucun état partiel n'existe : un geste composé inte
 - La raison de la précision à 72 % n'est pas donnée dans le code ; l'intention supposée (contrôle plus fin quand on combine) n'est pas documentée.
 - Le pincement interrompu par le système ne repasse par aucun nettoyage explicite dans le code (la distance reste simplement où elle est) ; sans conséquence identifiée, non vérifié.
 - L'ampleur réglée sur une sonde invisible (voir Cas limites) ressemble à un défaut : aucun retour visuel, et un réglage « fantôme » s'applique plus tard. À trancher en triage.
+- Le pincement sans effet quand un lancement est sélectionné (voir Cas limites) ressemble aussi à un défaut, ou au moins à une limite non signalée : le geste est reconnu mais son résultat est écrasé à chaque image. À trancher en triage.
 - Des traces de débogage (`print`) subsistent dans le code des gestes ; invisibles pour l'utilisateur, elles ne sont pas un défaut produit.
 
 Vérifié contre le dossier natif au commit `ddd8314`.
