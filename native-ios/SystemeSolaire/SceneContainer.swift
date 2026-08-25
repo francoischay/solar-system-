@@ -57,7 +57,12 @@ struct SceneContainer: UIViewRepresentable {
         private var lastTranslation = CGPoint.zero
         private var lastTwoFingerTranslation = CGPoint.zero
         private var lastRotation: CGFloat = 0
+        /// Dernier instant où un geste à deux doigts était en cours : toute fin de
+        /// pan à un doigt dans la foulée est un doigt qui traîne, jamais un flick.
+        private var lastMultiTouchActivity: TimeInterval = .zero
         init(engine: Engine) { self.engine = engine }
+
+        private func noteMultiTouchActivity() { lastMultiTouchActivity = CACurrentMediaTime() }
 
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
@@ -103,9 +108,15 @@ struct SceneContainer: UIViewRepresentable {
                 engine.panChanged(dx: Double(t.x - lastTranslation.x), dy: Double(t.y - lastTranslation.y))
                 lastTranslation = t
             case .ended:
+                let sinceMulti = CACurrentMediaTime() - lastMultiTouchActivity
                 let v = recognizer.velocity(in: recognizer.view)
-                print("[G] pan1 ENDED v=\(v)")
-                engine.panEnded(velocityX: Double(v.x), velocityY: Double(v.y))
+                print("[G] pan1 ENDED v=\(v) sinceMulti=\(sinceMulti)")
+                if sinceMulti < 0.5 {
+                    // Doigt restant d'un geste à deux doigts : pas d'inertie.
+                    engine.panEnded(velocityX: 0, velocityY: 0, allowsInertia: false)
+                } else {
+                    engine.panEnded(velocityX: Double(v.x), velocityY: Double(v.y))
+                }
             case .cancelled:
                 engine.panEnded(velocityX: 0, velocityY: 0, allowsInertia: false)
             default:
@@ -114,6 +125,7 @@ struct SceneContainer: UIViewRepresentable {
         }
 
         @objc func twoFingerPan(_ recognizer: UIPanGestureRecognizer) {
+            noteMultiTouchActivity()
             if recognizer.state != .changed { print("[G] pan2 state=\(recognizer.state.rawValue)") }
             switch recognizer.state {
             case .began:
@@ -138,6 +150,7 @@ struct SceneContainer: UIViewRepresentable {
         }
 
         @objc func pinch(_ recognizer: UIPinchGestureRecognizer) {
+            noteMultiTouchActivity()
             switch recognizer.state {
             case .began:
                 cancelSingleFingerPan()
@@ -150,6 +163,7 @@ struct SceneContainer: UIViewRepresentable {
         }
 
         @objc func rotate(_ recognizer: UIRotationGestureRecognizer) {
+            noteMultiTouchActivity()
             if recognizer.state != .changed { print("[G] rot state=\(recognizer.state.rawValue)") }
             switch recognizer.state {
             case .began:
