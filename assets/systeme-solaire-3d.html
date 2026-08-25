@@ -1,0 +1,2528 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"
+    />
+    <meta name="theme-color" content="#070a24" />
+    <title>Système solaire 3D</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body,
+      #app {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+          sans-serif;
+        color: #fff;
+        background: #11143f;
+        -webkit-font-smoothing: antialiased;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+        isolation: isolate;
+        background:
+          radial-gradient(
+            circle at 12% 86%,
+            rgba(130, 75, 235, 0.68),
+            transparent 35%
+          ),
+          radial-gradient(
+            circle at 80% 18%,
+            rgba(49, 60, 181, 0.24),
+            transparent 34%
+          ),
+          linear-gradient(155deg, #11133d 0%, #171858 48%, #292064 100%);
+        touch-action: none;
+        transition: background 0.8s ease;
+      }
+      #app:after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background: linear-gradient(
+          180deg,
+          rgba(5, 6, 35, 0.2),
+          transparent 30%,
+          rgba(15, 10, 58, 0.08) 65%,
+          rgba(89, 45, 174, 0.16)
+        );
+        mix-blend-mode: screen;
+      }
+      #app.day {
+        background:
+          radial-gradient(
+            circle at 20% 68%,
+            rgba(255, 245, 176, 0.85),
+            transparent 38%
+          ),
+          linear-gradient(155deg, #bfd7db, #e9e9c6 58%, #f7cb61);
+      }
+      canvas {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+      }
+      .glass {
+        background: linear-gradient(
+          145deg,
+          rgba(122, 118, 225, 0.26),
+          rgba(31, 32, 92, 0.3)
+        );
+        border: 1px solid rgba(190, 194, 255, 0.3);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          0 8px 28px rgba(4, 5, 28, 0.18);
+        backdrop-filter: blur(22px) saturate(135%);
+        -webkit-backdrop-filter: blur(22px) saturate(135%);
+        color: #fff;
+      }
+      .btn {
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+        font-weight: 650;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
+        transition:
+          transform 0.18s ease,
+          background 0.18s ease;
+      }
+      .btn:active {
+        transform: scale(0.96);
+        background: rgba(142, 134, 239, 0.42);
+      }
+      .stack {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .top {
+        top: calc(16px + env(safe-area-inset-top));
+        z-index: 4;
+      }
+      .left {
+        left: 16px;
+      }
+      .right {
+        right: 16px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .pill {
+        border: 1px solid rgba(255, 255, 255, 0.38);
+        min-height: 34px;
+        border-radius: 18px;
+        padding: 0 14px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .controls {
+        top: calc(88px + env(safe-area-inset-top));
+        left: 16px;
+        z-index: 4;
+      }
+      .controls .btn {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+      }
+      .dock {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: calc(14px + env(safe-area-inset-bottom));
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        z-index: 4;
+      }
+      .dock .btn {
+        width: 58px;
+        height: 58px;
+        font-size: 21px;
+      }
+      .info {
+        flex: 1;
+        min-width: 0;
+        height: 58px;
+        border-radius: 29px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 9px 18px 14px;
+        overflow: hidden;
+        touch-action: pan-y;
+      }
+      .info.spacecraft-info { cursor:pointer; }
+      .info {
+        --sheet-progress: 0;
+        --sheet-offset: 8px;
+        position: relative;
+        transition-property: height, border-radius;
+        transition-duration: 320ms;
+        transition-timing-function: cubic-bezier(.2, 0, 0, 1);
+      }
+      .info.dragging { transition-duration: 0ms; }
+      .info.expanded {
+        border-radius: 22px;
+      }
+      .sheet-grabber {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        z-index: 1;
+        width: 64px;
+        height: 40px;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        transform: translateX(-50%);
+        touch-action: none;
+        cursor: ns-resize;
+      }
+      .sheet-grabber:after {
+        content: "";
+        position: absolute;
+        left: 14px;
+        top: 5px;
+        width: 36px;
+        height: 5px;
+        border-radius: 3px;
+        background: rgba(255,255,255,.34);
+      }
+      .info:not(.has-detail) .sheet-grabber { opacity: 0; pointer-events: none; }
+      .info-header {
+        width: 100%;
+        min-height: 40px;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding-top: 2px;
+        touch-action: none;
+        cursor: ns-resize;
+      }
+      .info.has-detail .info-header { padding-right: 30px; padding-left: 30px; }
+      .detail {
+        display: block;
+        width: 100%;
+        min-height: 0;
+        margin: 10px 2px 0;
+        padding: 0 0 4px;
+        overflow-y: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+        font-weight: 480;
+        text-align: left;
+        color: rgba(255,255,255,.74);
+        opacity: var(--sheet-progress);
+        transform: translateY(var(--sheet-offset));
+        pointer-events: none;
+        scrollbar-width: none;
+        text-wrap: pretty;
+        transition-property: opacity, transform;
+        transition-duration: 180ms;
+        transition-timing-function: cubic-bezier(.2, 0, 0, 1);
+      }
+      .detail::-webkit-scrollbar { display: none; }
+      .info.expanded .detail { pointer-events: auto; }
+      .info.hidden { visibility: hidden; }
+      .date-link {
+        margin: 0;
+        padding: 0 1px;
+        border: 0;
+        background: none;
+        color: #dbe6ff;
+        font: inherit;
+        font-weight: 620;
+        text-decoration: underline dotted currentColor;
+        text-underline-offset: 3px;
+        cursor: pointer;
+      }
+      .date-link:hover, .date-link:active { color: #fff; text-decoration-style: solid; }
+      .detail-toggle {
+        display: none;
+        position: absolute;
+        right: 8px;
+        top: 11px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: 0;
+        border-radius: 20px;
+        background: rgba(255,255,255,.1);
+        color: inherit;
+        font-size: 13px;
+        line-height: 1;
+        opacity: .75;
+        transition-property: transform, background-color;
+        transition-duration: 280ms, 160ms;
+        transition-timing-function: cubic-bezier(.2, 0, 0, 1), ease-out;
+      }
+      .info.has-detail .detail-toggle { display: block; }
+      .info.expanded .detail-toggle { transform: rotate(180deg); }
+      .detail-toggle:active { background: rgba(255,255,255,.18); transform: scale(.96); }
+      .info.expanded .detail-toggle:active { transform: rotate(180deg) scale(.96); }
+      .name {
+        font-size: 16px;
+        font-weight: 680;
+        letter-spacing: -0.2px;
+      }
+      .sub {
+        margin-top: 2px;
+        font-size: 12px;
+        font-weight: 520;
+        opacity: 0.58;
+      }
+      .labels {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+      }
+      .label {
+        position: absolute;
+        transform: translate(-50%, -145%);
+        display: none;
+        padding: 5px 9px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #17183d;
+        font-size: 11px;
+        font-weight: 700;
+        box-shadow: 0 5px 18px rgba(6, 7, 35, 0.22);
+      }
+      .timeline {
+        position: absolute;
+        right: 25px;
+        top: 132px;
+        bottom: 112px;
+        width: 1px;
+        background: linear-gradient(
+          transparent,
+          rgba(205, 207, 255, 0.34) 12%,
+          rgba(205, 207, 255, 0.34) 88%,
+          transparent
+        );
+        z-index: 4;
+      }
+      .timeline:before,
+      .timeline:after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        border: 1px solid rgba(205, 207, 255, 0.42);
+        background: #24215d;
+        transform: translateX(-50%);
+      }
+      .timeline:before {
+        top: 14%;
+      }
+      .timeline:after {
+        bottom: 14%;
+      }
+      .handle {
+        position: absolute;
+        right: -11px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255, 255, 255, 0.96);
+        color: #17183d;
+        border-radius: 18px;
+        padding: 8px 11px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 750;
+        box-shadow: 0 8px 24px rgba(8, 8, 40, 0.2);
+        z-index: 7;
+        transition: transform .16s cubic-bezier(.22,.61,.36,1), box-shadow .16s ease;
+      }
+      .handle.dragging { /* sort de sous le doigt pendant le glissement */
+        transform: translateY(-50%) translateX(-72px) scale(1.06);
+        box-shadow: 0 12px 30px rgba(8, 8, 40, 0.34);
+      }
+      .boot {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        z-index: 4;
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+        opacity: 0.7;
+      }
+      .browser {
+        position: absolute;
+        z-index: 8;
+        left: 16px;
+        right: 16px;
+        bottom: calc(80px + env(safe-area-inset-bottom));
+        max-height: min(54vh, 460px);
+        display: flex;
+        flex-direction: column;
+        border-radius: 24px;
+        padding: 6px 6px 0;
+        pointer-events: auto;
+        transform-origin: bottom left;
+        animation: pop .18s ease-out;
+      }
+      .browser.closed { display: none; }
+      .browser.glass { /* la liste doit rester lisible même au-dessus du halo du Soleil */
+        background: linear-gradient(160deg, rgba(46,44,120,.93), rgba(20,21,66,.95));
+      }
+      @media (min-width: 640px) { .browser { right: auto; width: 380px; } }
+      .browser-head { display: flex; align-items: center; gap: 6px; padding: 2px 2px 7px; }
+      .browser-tabs { flex: 1; display: flex; gap: 3px; padding: 3px; border-radius: 16px; background: rgba(11,13,52,.34); }
+      .browser-tabs .explore-tab {
+        flex: 1; min-width: 0; border: 0; border-radius: 13px; padding: 9px 4px;
+        color: rgba(255,255,255,.6); background: transparent; font-size: 11.5px; font-weight: 760;
+      }
+      .browser-tabs .explore-tab.active { color: #222452; background: #f4f2ff; }
+      .browser-close { flex: none; width: 34px; height: 34px; border: 0; border-radius: 17px; background: rgba(255,255,255,.1); color: #fff; font-size: 18px; line-height: 1; }
+      .browser-body { overflow-y: auto; padding: 0 9px 10px; scrollbar-width: none; }
+      .browser-body::-webkit-scrollbar { display: none; }
+      .browser-list.closed { display: none; }
+      .mission-panel.closed { display:none; }
+      .mission-toggle {
+        position:absolute; left:16px; top:calc(16px + env(safe-area-inset-top)); z-index:6;
+        min-height:42px; border:1px solid rgba(190,194,255,.3); border-radius:21px;
+        padding:0 15px; background:rgba(34,34,101,.58); color:white; font-size:12px;
+        font-weight:760; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+      }
+      .pop-menu {
+        position:absolute; z-index:8; left:16px;
+        bottom:calc(80px + env(safe-area-inset-bottom));
+        display:flex; flex-direction:column; gap:2px; padding:5px; border-radius:20px;
+        transform-origin:bottom left; animation:pop .16s ease-out;
+      }
+      .pop-menu.right { left:auto; right:16px; transform-origin:bottom right; }
+      .pop-menu.closed { display:none; }
+      @keyframes pop { from { opacity:0; transform:scale(.92) translateY(6px); } }
+      .pop-menu button { min-width:118px; border:0; border-radius:15px; padding:10px 13px; color:rgba(255,255,255,.68); background:transparent; font-size:12px; font-weight:740; text-align:left; }
+      .pop-menu.right button { min-width:92px; }
+      .pop-menu button.active { color:#222452; background:#f4f2ff; }
+      .dock-round {
+        flex:none; width:46px; height:46px; padding:0; border:0; border-radius:23px;
+        color:rgba(255,255,255,.9); font-size:15px; font-weight:760; line-height:1;
+      }
+      .dock-round.open { color:#222452; background:#f4f2ff; }
+      .data-panel { position:absolute; left:16px; top:calc(16px + env(safe-area-inset-top)); z-index:6; width:min(344px,calc(100vw - 76px)); max-height:min(440px,calc(100vh - 145px)); overflow:auto; border-radius:22px; padding:15px; scrollbar-width:none; }
+      .data-panel::-webkit-scrollbar { display:none; }
+      .data-panel.closed { display:none; }
+      .panel-kicker { color:#aeb7ff; font-size:10px; font-weight:800; letter-spacing:1.25px; text-transform:uppercase; }
+      .panel-title { margin:3px 0 12px; font-size:18px; font-weight:780; letter-spacing:-.35px; }
+      .object-card { width:100%; display:flex; align-items:center; gap:11px; border:0; border-radius:15px; padding:10px; margin-top:7px; color:white; background:rgba(11,13,52,.28); text-align:left; }
+      .object-card.selected { color:#252552; background:#f4f2ff; }
+      .object-icon { width:36px; height:36px; flex:none; display:grid; place-items:center; border-radius:11px; color:#151839; background:var(--accent,#9de9ff); font-size:17px; font-weight:800; }
+      .object-copy { min-width:0; flex:1; }
+      .object-name { display:block; font-size:12px; font-weight:760; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .object-meta { display:block; margin-top:3px; font-size:9px; font-weight:630; opacity:.58; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .launch-time { flex:none; text-align:right; }
+      .launch-count { display:block; color:#9ff3dc; font-size:10px; font-weight:800; }
+      .object-card.selected .launch-count { color:#3c7a6d; }
+      .launch-date { display:block; margin-top:3px; font-size:9px; opacity:.55; }
+      .panel-note { margin:11px 2px 0; color:rgba(255,255,255,.48); font-size:9px; line-height:1.4; }
+      .live-dot { display:inline-block; width:6px; height:6px; margin-right:5px; border-radius:50%; background:#70efc7; box-shadow:0 0 10px #70efc7; }
+      .mission-toggle { display:none !important; }
+      .mission-close { flex:none; width:30px; height:30px; border:0; border-radius:50%; background:rgba(255,255,255,.1); color:white; font-size:17px; line-height:1; }
+      .mission-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+      .mission-kicker { color:#aeb7ff; font-size:10px; font-weight:800; letter-spacing:1.25px; text-transform:uppercase; }
+      .mission-title { margin-top:3px; font-size:16px; font-weight:760; letter-spacing:-.25px; }
+      .mission-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:9px; padding-bottom:2px; scrollbar-width:none; }
+      .mission-list::-webkit-scrollbar { display:none; }
+      .mission-chip { min-width:0; border:0; border-radius:12px; padding:8px 10px; background:rgba(12,14,55,.3); color:rgba(255,255,255,.8); text-align:left; }
+      .mission-chip-name { display:block; font-size:11px; font-weight:720; white-space:nowrap; }
+      .mission-chip-dates { display:block; margin-top:3px; color:rgba(255,255,255,.48); font-size:9px; font-weight:620; }
+      .mission-chip.selected { background:#f4f2ff; color:#252552; }
+      .mission-chip.selected .mission-chip-dates { color:rgba(37,37,82,.58); }
+      .mission-display-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; color:rgba(255,255,255,.72); font-size:11px; font-weight:680; }
+      .switch { position:relative; width:38px; height:22px; flex:none; }
+      .switch input { position:absolute; opacity:0; pointer-events:none; }
+      .switch-track { position:absolute; inset:0; border-radius:12px; background:rgba(255,255,255,.16); transition:.2s; }
+      .switch-track:after { content:""; position:absolute; width:16px; height:16px; left:3px; top:3px; border-radius:50%; background:#d9dcff; transition:.2s; }
+      .switch input:checked + .switch-track { background:#766ff0; }
+      .switch input:checked + .switch-track:after { transform:translateX(16px); background:white; }
+      .spacecraft-label { background:rgba(22,27,68,.92); color:#fff; border:1px solid rgba(128,225,255,.42); }
+      @media (max-width: 560px) {
+        .mission-meta span:first-child { display:none; }
+        .mission-panel, .data-panel {
+          left:16px; right:16px; width:auto; padding:13px;
+          top:calc(16px + env(safe-area-inset-top));
+          max-height:calc(100vh - 190px);
+        }
+        .mission-chip-name { font-size:10.5px; }
+      }
+      @media (min-width: 700px) {
+        .dock {
+          left: 24px;
+          right: 24px;
+          bottom: 24px;
+        }
+        .top.left {
+          left: 24px;
+        }
+        .top.right {
+          right: 24px;
+        }
+        .controls {
+          left: 24px;
+        }
+      }
+
+      .top,
+      .controls,
+      .dock > .btn {
+        display: none !important;
+      }
+      .dock {
+        left: 18%;
+        right: 18%;
+        justify-content: center;
+      }
+      .dock .info {
+        flex: 1;
+        width: 100%;
+      }
+      @media (min-width: 700px) {
+        .dock {
+          left: 28%;
+          right: 28%;
+        }
+      }
+      .timeline {
+        right: 8px;
+        width: 54px;
+        background: none;
+      }
+      .timeline:before,
+      .timeline:after {
+        display: none;
+      }
+      .handle {
+        right: 0;
+      }
+      .today-return {
+        display: none;
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        transition: opacity .18s ease;
+        z-index: 6;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 18px;
+        padding: 8px 12px;
+        background: rgba(35, 31, 98, 0.72);
+        color: white;
+        font-size: 12px;
+        font-weight: 720;
+        white-space: nowrap;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      .dock {
+        display: flex;
+        left: 16px;
+        right: 16px;
+        gap: 10px;
+        justify-content: space-between;
+      }
+      .timeline {
+        pointer-events: none;
+      }
+      .scale-control {
+        position: absolute;
+        right: 12px;
+        bottom: calc(20px + env(safe-area-inset-bottom));
+        z-index: 6;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px;
+        border-radius: 17px;
+        pointer-events: auto;
+      }
+      .scale-control button {
+        min-width: 30px;
+        height: 25px;
+        padding: 0 5px;
+        border: 0;
+        border-radius: 13px;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 10px;
+        font-weight: 780;
+        letter-spacing: 0.3px;
+        transition: color .2s ease, background .2s ease;
+      }
+      .scale-control button.active {
+        color: #222452;
+        background: #f4f2ff;
+      }
+      .handle,
+      .today-return {
+        pointer-events: auto;
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="boot" class="boot">Chargement du système…</div>
+      <div id="labels" class="labels"></div>
+      <button id="missionToggle" class="mission-toggle" aria-expanded="false">✦ Sondes</button>
+      <section id="browser" class="browser glass closed" aria-label="Explorer">
+        <header class="browser-head">
+          <div class="browser-tabs">
+            <button class="explore-tab" data-view="missions">Sondes</button>
+            <button class="explore-tab" data-view="satellites">Satellites</button>
+            <button class="explore-tab" data-view="launches">Lancements</button>
+          </div>
+          <button id="missionClose" class="browser-close" aria-label="Fermer">×</button>
+        </header>
+        <div class="browser-body">
+          <div id="missionPanel" class="browser-list closed">
+            <div id="missionList" class="mission-list"></div>
+            <label class="mission-display-toggle"><span>Afficher toutes les sondes</span><span class="switch"><input id="showAllMissions" type="checkbox" /><span class="switch-track"></span></span></label>
+          </div>
+          <div id="satellitePanel" class="browser-list closed">
+            <div id="satelliteList"></div>
+            <label class="mission-display-toggle"><span>Afficher tous les satellites</span><span class="switch"><input id="showAllSatellites" type="checkbox" /><span class="switch-track"></span></span></label>
+            <div class="panel-note">Positions calculées localement · orbites illustratives</div>
+          </div>
+          <div id="launchPanel" class="browser-list closed">
+            <div id="launchList"></div>
+            <div class="panel-note">Fenêtres indicatives · trajectoire non télémétrique</div>
+          </div>
+        </div>
+      </section>
+      <div id="compass" class="top left btn glass">N</div>
+      <div class="top right row">
+        <button
+          class="btn glass"
+          id="toggleLabels"
+          aria-label="Afficher les noms"
+        >
+          ◫</button
+        ><button class="btn glass" id="reset" aria-label="Réinitialiser">
+          •••
+        </button>
+      </div>
+      <div class="controls stack">
+        <button class="btn glass" id="zin" aria-label="Zoomer">+</button
+        ><button class="btn glass" id="zout" aria-label="Dézoomer">−</button
+        ><button
+          class="btn glass"
+          id="back"
+          aria-label="Retour"
+          style="display: none"
+        >
+          ↩
+        </button>
+      </div>
+      <button id="now" class="top left pill glass" style="top: 76px">
+        Aujourd’hui
+      </button>
+      <button id="todayReturn" class="today-return">Aujourd’hui</button>
+      <div id="timeline" class="timeline">
+        <div id="handle" class="handle">—</div>
+      </div>
+      <div id="scaleMenu" class="pop-menu right glass closed" role="menu" aria-label="Pas de la timeline">
+        <button data-range="4.2" data-short="H">Heure</button>
+        <button data-range="100" class="active" data-short="J">Jour</button>
+        <button data-range="3044" data-short="M">Mois</button>
+        <button data-range="36525" data-short="A">Année</button>
+      </div>
+      <div class="dock">
+        <button id="viewTrigger" class="dock-round glass" aria-label="Explorer">◎</button>
+        <button class="btn glass" id="theme" aria-label="Changer l’ambiance">
+          ☼
+        </button>
+        <div id="selectionInfo" class="info glass" aria-label="Détail de la sélection">
+          <button id="sheetGrabber" class="sheet-grabber" aria-expanded="false" aria-label="Agrandir ou réduire le détail"></button>
+          <div id="infoHeader" class="info-header">
+            <div>
+              <span id="iname" class="name">Système solaire</span>
+            </div>
+            <div id="sub" class="sub">Explorer les orbites</div>
+          </div>
+          <p id="detail" class="detail"></p>
+          <button id="detailToggle" class="detail-toggle" aria-expanded="false" aria-label="En savoir plus">⌄</button>
+        </div>
+        <button class="btn glass" id="play" aria-label="Lecture">Ⅱ</button>
+        <button id="scaleTrigger" class="dock-round glass" aria-label="Pas de la timeline">J</button>
+      </div>
+    </div>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+    <script>
+      (() => {
+        const app = document.getElementById("app"),
+          boot = document.getElementById("boot"),
+          labelsBox = document.getElementById("labels"),
+          compass = document.getElementById("compass"),
+          iname = document.getElementById("iname"),
+          sub = document.getElementById("sub"),
+          back = document.getElementById("back"),
+          handle = document.getElementById("handle");
+        if (!window.THREE) {
+          boot.textContent = "Connexion requise pour charger le moteur 3D";
+          return;
+        }
+        const UP = new THREE.Vector3(0, 1, 0),
+          DEG = Math.PI / 180,
+          TAU = Math.PI * 2,
+          J2000 = Date.UTC(2000, 0, 1, 12),
+          // Éléments képlériens J2000 (JPL) : demi-grand axe UA, période (a), longitude moyenne,
+          // longitude du périhélie, longitude du nœud ascendant, inclinaison, excentricité
+          bodies = [
+            ["Mercure", 0.38709927, 0.2408467, 252.25032, 77.45780, 48.33077, 7.00498, 0.2056359, 0.8, 0xa8a2a4],
+            ["Vénus", 0.72333566, 0.6151973, 181.97910, 131.60247, 76.67984, 3.39468, 0.0067767, 1.1, 0xe1c792],
+            ["Terre", 1.00000261, 1.0000174, 100.46457, 102.93768, 0.0, 0.0, 0.0167112, 1.2, 0x62a8db],
+            ["Mars", 1.52371034, 1.8808476, -4.55343, -23.94363, 49.55954, 1.84969, 0.0933941, 0.95, 0xc66d55],
+            ["Jupiter", 5.20288700, 11.862615, 34.39644, 14.72848, 100.47391, 1.30440, 0.0483862, 2.8, 0xd9b68d],
+            ["Saturne", 9.53667594, 29.447498, 49.95424, 92.59888, 113.66242, 2.48599, 0.0538618, 2.4, 0xdccaa2],
+            ["Uranus", 19.18916464, 84.016846, 313.23810, 170.95428, 74.01693, 0.77264, 0.0472574, 1.8, 0xa2dce2],
+            ["Neptune", 30.06992276, 164.79132, 304.87997, 44.96476, 131.78422, 1.77004, 0.0085905, 1.75, 0x677ed5],
+          ].map((b, i) => ({
+            n: b[0],
+            a: b[1],
+            p: b[2],
+            L: b[3],
+            peri: b[4],
+            node: b[5],
+            inc: b[6],
+            e: b[7],
+            size: b[8],
+            c: b[9],
+            r: 12 + (Math.log1p(b[1]) / Math.log1p(30.07)) * 88,
+            i,
+          }));
+        const missionSpecs = [
+          // Trajectoires reconstruites : départ de la Terre, assistances gravitationnelles aux dates réelles,
+          // puis droite d'échappement vers l'apex calée sur le franchissement de l'héliopause.
+          // [année, UA, longitude écliptique (rad, non repliée), latitude écliptique (°)]
+          { n:"Voyager 1", status:"active", color:0x70e6ff, valid:"1977–2030", launch:1977.68,
+            route:[[1977.68,1.00,5.9812,0],[1978.05,2.29,7.4562,0],[1978.43,3.33,7.9618,0],[1978.80,4.29,8.2371,0],[1979.17,5.20,8.4146,0],[1979.60,6.54,8.7724,0],[1980.02,7.61,9.0189,0],[1980.44,8.60,9.2066,0],[1980.87,9.54,9.3566,0],[1983.00,13.33,9.8994,20.4],[1987.00,26.25,10.3211,30.6],[1992.00,44.37,10.4941,33.1],[1998.00,66.65,10.5787,34.1],[2005.00,92.86,10.6265,34.5],[2012.65,121.60,10.6554,34.7],[2019.00,145.49,10.6708,34.8],[2026.00,171.84,10.6828,34.9],[2032.00,194.44,10.6905,35.0]] },
+          { n:"Voyager 2", status:"active", color:0x8ab6ff, valid:"1977–2030", launch:1977.65,
+            route:[[1977.65,1.00,5.7072,0],[1978.12,2.29,7.4606,0],[1978.59,3.33,8.0617,0],[1979.05,4.29,8.3890,0],[1979.52,5.20,8.6001,0],[1980.05,6.54,8.9506,0],[1980.59,7.61,9.1921,0],[1981.12,8.60,9.3761,0],[1981.65,9.54,9.5230,0],[1982.76,12.51,9.9988,0],[1983.86,14.89,10.3068,0],[1984.96,17.10,10.5328,0],[1986.07,19.19,10.7084,0],[1986.96,22.54,10.8809,0],[1987.86,25.23,11.0126,0],[1988.76,27.71,11.1198,0],[1989.65,30.07,11.2097,0],[1993.00,39.24,11.2314,-9.1],[1998.00,54.00,11.2502,-16.7],[2004.00,72.40,11.2632,-21.6],[2011.00,94.26,11.2723,-24.9],[2018.85,119.00,11.2789,-27.2],[2026.00,141.64,11.2830,-28.5],[2032.00,160.69,11.2856,-29.4]] },
+          { n:"New Horizons", status:"active", color:0xd6a8ff, valid:"2006–2030", launch:2006.05,
+            route:[[2006.05,1.00,2.0675,0],[2006.33,2.29,3.4772,0],[2006.61,3.33,3.9606,0],[2006.88,4.29,4.2239,0],[2007.16,5.20,4.3936,0],[2009.26,13.73,4.7202,0],[2011.35,20.57,4.8197,0],[2013.44,26.89,4.8717,0],[2015.54,32.90,4.9044,0],[2019.00,42.08,4.9162,0.6],[2022.00,50.05,4.9229,0.9],[2026.50,62.00,4.9298,1.3],[2032.00,76.61,4.9352,1.5]] }, // Terre 2006, Jupiter 2007, Pluton 2015, ceinture de Kuiper
+          { n:"Parker Solar Probe", status:"active", color:0xffad66, valid:"2018–2027", orbit:[0.046,0.73,0.24,0.241] },
+          { n:"Solar Orbiter", status:"active", color:0xffd673, valid:"2020–2030", orbit:[0.28,0.91,0.46,0.46] },
+          { n:"JUICE", status:"active", color:0xb7ed7d, valid:"2023–2035", route:[[2023.29,1.00,3.5755,0],[2023.74,1.00,4.2876,0],[2024.18,1.00,4.9997,0],[2024.63,1.00,5.7118,0],[2024.96,0.89,6.1136,0],[2025.29,0.80,6.6137,0],[2025.62,0.72,7.2299,0],[2025.98,0.83,9.3840,0],[2026.35,0.92,11.0829,0],[2026.71,1.00,12.4976,0],[2027.49,1.00,13.1888,0],[2028.26,1.00,13.8799,0],[2029.04,1.00,14.5711,0],[2029.87,2.65,16.4446,0],[2030.71,3.98,17.0132,0],[2031.54,5.20,17.3096,0],[2032.54,5.20,17.8394,0],[2033.54,5.20,18.3692,0],[2034.54,5.20,18.8990,0]] },
+          { n:"Europa Clipper", status:"active", color:0x8de6c4, valid:"2024–2034", route:[[2024.78,1.00,0.3711,0],[2024.92,1.21,1.2434,0],[2025.05,1.37,1.8826,0],[2025.19,1.52,2.3892,0],[2025.78,1.32,3.7010,0],[2026.36,1.15,5.4365,0],[2026.95,1.00,7.7224,0],[2028.06,2.65,9.5262,0],[2029.17,3.98,10.0735,0],[2030.28,5.20,10.3589,0],[2031.28,5.20,10.8887,0],[2032.28,5.20,11.4185,0],[2033.28,5.20,11.9483,0]] },
+          { n:"Lucy", status:"active", color:0xf8cb91, valid:"2021–2033", orbit:[1.0,5.3,3.1,6.0] },
+          { n:"Psyche", status:"active", color:0xf19bb9, valid:"2023–2031", route:[[2023.78,1.00,0.3711,0],[2024.65,1.21,2.9762,0],[2025.52,1.37,4.8852,0],[2026.39,1.52,6.3979,0],[2027.46,2.10,7.2160,0],[2028.53,2.57,7.7089,0],[2029.60,3.00,8.0560,0],[2030.60,3.00,8.7541,0]] },
+          { n:"Juno", status:"active", color:0xecd7aa, valid:"2016–2028", parent:"Jupiter", local:[4.2,0.003,0.5] },
+          { n:"BepiColombo", status:"active", color:0xffc66f, valid:"2018–2028", route:[[2018.80,1.00,0.4967,0],[2019.29,1.00,1.5020,0],[2019.79,1.00,2.5073,0],[2020.28,1.00,3.5126,0],[2020.45,0.89,4.7442,0],[2020.62,0.80,6.2769,0],[2020.79,0.72,8.1652,0],[2021.06,0.72,8.8624,0],[2021.34,0.72,9.5597,0],[2021.61,0.72,10.2569,0],[2021.67,0.59,10.9703,0],[2021.73,0.49,12.0343,0],[2021.79,0.39,13.6545,0],[2022.35,0.39,15.6104,0],[2022.90,0.39,17.5663,0],[2023.46,0.39,19.5222,0],[2023.97,0.39,20.3476,0],[2024.49,0.39,21.1730,0],[2025.00,0.39,21.9985,0],[2025.63,0.39,23.8600,0],[2026.27,0.39,25.7216,0],[2026.90,0.39,27.5832,0],[2027.30,0.39,31.7351,0],[2027.70,0.39,35.8871,0],[2028.10,0.39,40.0391,0]] },
+          { n:"OSIRIS-APEX", status:"active", color:0xeeeece, valid:"2023–2029", orbit:[0.78,1.36,1.45,1.2] },
+          { n:"Cassini", status:"historic", color:0xd8c18d, valid:"1997–2017", route:[[1997.79,1.00,0.4339,0],[1997.97,0.89,1.6074,0],[1998.14,0.80,3.0680,0],[1998.32,0.72,4.8674,0],[1998.71,0.72,6.7221,0],[1999.09,0.72,8.5769,0],[1999.48,0.72,10.4316,0],[1999.53,0.83,11.0709,0],[1999.58,0.92,11.5751,0],[1999.63,1.00,11.9949,0],[2000.08,2.65,13.1555,0],[2000.54,3.98,13.5076,0],[2000.99,5.20,13.6912,0],[2002.16,6.91,14.0280,0],[2003.33,8.27,14.2424,0],[2004.50,9.54,14.3981,0],[2006.10,9.54,14.7394,0],[2007.70,9.54,15.0808,0],[2009.30,9.54,15.4222,0],[2010.90,9.54,15.7635,0],[2012.50,9.54,16.1049,0],[2014.10,9.54,16.4462,0],[2015.70,9.54,16.7876,0],[2017.30,9.54,17.1290,0]] },
+          { n:"Galileo", status:"historic", color:0xb8b4a6, valid:"1989–2003", route:[[1989.80,1.00,0.4967,0],[1989.90,0.89,1.0793,0],[1990.01,0.80,1.8044,0],[1990.11,0.72,2.6977,0],[1990.39,0.83,4.7267,0],[1990.66,0.92,6.3270,0],[1990.94,1.00,7.6596,0],[1991.61,1.00,7.6596,0],[1992.27,1.00,7.6596,0],[1992.94,1.00,7.6596,0],[1993.94,2.65,9.9594,0],[1994.95,3.98,10.6572,0],[1995.95,5.20,11.0212,0],[1997.15,5.20,11.6569,0],[1998.35,5.20,12.2926,0],[1999.55,5.20,12.9284,0],[2000.75,5.20,13.5641,0],[2001.95,5.20,14.1998,0],[2003.15,5.20,14.8356,0]] },
+          { n:"Rosetta", status:"historic", color:0x9dcad4, valid:"2004–2016", orbit:[0.9,5.6,2.1,6.4] },
+          { n:"Pioneer 10", status:"historic", color:0x9fb8d6, valid:"1972–2030", launch:1972.17, route:[[1972.17,1.00,2.8215,0],[1972.61,2.29,4.5290,0],[1973.05,3.33,5.1144,0],[1973.49,4.29,5.4331,0],[1973.93,5.20,5.6386,0],[1980.00,16.09,7.3464,3.3],[1990.00,44.58,7.5384,3.1],[2003.00,82.10,7.5870,3.1],[2015.00,116.80,7.6041,3.1],[2026.00,148.62,7.6127,3.0],[2032.00,165.98,7.6161,3.0]] },
+          { n:"Pioneer 11", status:"historic", color:0xa9c9b6, valid:"1973–2030", launch:1973.26, route:[[1973.26,1.00,3.3870,0],[1973.67,2.29,5.0696,0],[1974.09,3.33,5.6465,0],[1974.51,4.29,5.9606,0],[1974.92,5.20,6.1631,0],[1976.11,6.54,7.2779,0],[1977.29,7.61,8.0460,0],[1978.48,8.60,8.6312,0],[1979.66,9.54,9.0984,0],[1985.00,12.99,10.5066,16.1],[1995.70,40.70,11.0079,15.4],[2010.00,80.11,11.1116,14.8],[2026.00,124.53,11.1493,14.5],[2032.00,141.21,11.1573,14.5]] },
+          { n:"Ulysses", status:"historic", color:0xffd9a0, valid:"1990–2009", launch:1990.76, route:[[1990.76,1.00,0.2454,0],[1991.21,2.65,1.9233,0],[1991.65,3.98,2.4327,0],[1992.10,5.20,2.6983,0],[1992.10,5.39,3.4956,-1.5],[1992.45,5.34,3.5169,-7.7],[1992.80,5.19,3.5396,-14.3],[1993.15,4.94,3.5658,-21.3],[1993.50,4.57,3.5988,-29.3],[1993.85,4.08,3.6464,-38.9],[1994.20,3.46,3.7342,-51.4],[1994.55,2.68,4.0309,-69.5],[1994.90,1.80,6.1690,-66.7],[1995.25,1.36,6.6861,15.6],[1995.60,2.05,7.8957,78.6],[1995.95,2.92,9.4219,60.8],[1996.30,3.65,9.5835,44.5],[1996.65,4.23,9.6486,33.0],[1997.00,4.69,9.6883,23.9],[1997.35,5.02,9.7176,16.3],[1997.70,5.25,9.7419,9.4],[1998.05,5.37,9.7638,3.0],[1998.40,5.39,9.7848,-3.3],[1998.75,5.31,9.8063,-9.6],[1999.10,5.13,9.8298,-16.2],[1999.45,4.84,9.8575,-23.5],[1999.80,4.44,9.8935,-31.8],[2000.15,3.92,9.9485,-42.1],[2000.50,3.25,10.0616,-55.8],[2000.85,2.43,10.6247,-75.6],[2001.20,1.58,12.6891,-49.4],[2001.55,1.48,13.0858,41.4],[2001.90,2.31,15.1080,76.7],[2002.25,3.14,15.7736,55.4],[2002.60,3.83,15.8897,40.9],[2002.95,4.38,15.9447,30.2],[2003.30,4.79,15.9806,21.6],[2003.65,5.10,16.0081,14.2],[2004.00,5.29,16.0315,7.5],[2004.35,5.38,16.0530,1.2],[2004.70,5.38,16.0740,-5.0],[2005.05,5.27,16.0959,-11.4],[2005.40,5.06,16.1204,-18.2],[2005.75,4.74,16.1498,-25.7],[2006.10,4.31,16.1897,-34.5],[2006.45,3.74,16.2545,-45.5],[2006.80,3.03,16.4092,-60.8],[2007.15,2.18,17.6769,-79.1],[2007.50,1.41,19.1040,-26.1],[2007.85,1.68,19.5620,61.6],[2008.20,2.56,21.7765,70.2],[2008.55,3.35,22.1027,50.7],[2008.90,4.00,22.1918,37.5],[2009.25,4.51,22.2394,27.6]] },
+          { n:"MESSENGER", status:"historic", color:0xd7c9ff, valid:"2004–2015", launch:2004.59, route:[[2004.59,1.00,5.4604,0],[2005.14,0.91,6.2973,0],[2005.69,0.85,7.2865,0],[2006.25,0.78,8.4421,0],[2006.80,0.72,9.7946,0],[2007.11,0.62,10.3268,0],[2007.42,0.54,11.0445,0],[2007.74,0.46,12.0107,0],[2008.05,0.39,13.3483,0],[2008.84,0.39,13.5374,0],[2009.63,0.39,13.7265,0],[2010.42,0.39,13.9156,0],[2011.21,0.39,14.1047,0],[2011.60,0.39,17.9957,0],[2012.05,0.39,20.3105,0],[2012.50,0.39,22.6253,0],[2012.95,0.39,24.9401,0],[2013.40,0.39,27.2549,0],[2013.85,0.39,29.5696,0],[2014.30,0.39,31.8844,0],[2014.75,0.39,34.1992,0],[2015.20,0.39,36.5140,0]] },
+          { n:"Hayabusa2", status:"active", color:0x9be3ff, valid:"2014–2031", launch:2014.92, route:[[2014.92,1.00,1.2507,0],[2015.92,1.00,1.2507,0],[2016.57,1.06,2.1779,0],[2017.22,1.11,3.0170,0],[2017.86,1.15,3.7902,0],[2018.51,1.19,4.5085,0],[2018.85,1.19,5.6276,0],[2019.18,1.19,6.7467,0],[2019.51,1.19,7.8658,0],[2019.85,1.19,8.9849,0],[2020.12,1.13,10.0392,0],[2020.38,1.08,11.1961,0],[2020.65,1.04,12.4534,0],[2020.92,1.00,13.8171,0],[2022.19,1.12,14.6459,0.2],[2023.46,1.22,15.3253,0.4],[2024.73,1.31,15.9066,0.6],[2026.00,1.40,16.4141,1.0],[2027.25,1.29,17.4560,1.1],[2028.50,1.21,18.6661,1.2],[2029.75,1.13,20.0551,1.3],[2031.00,1.05,21.6501,1.5]] },
+          { n:"Hera", status:"active", color:0xffb3c7, valid:"2024–2028", launch:2024.77, route:[[2024.77,1.00,0.3082,0],[2024.88,1.16,1.0214,0],[2024.99,1.29,1.5764,0],[2025.09,1.41,2.0343,0],[2025.20,1.52,2.4226,0],[2025.64,1.55,2.4682,0],[2026.08,1.58,2.5122,0],[2026.51,1.60,2.5548,0],[2026.95,1.62,2.5963,0],[2027.21,1.64,3.5512,0],[2027.47,1.66,4.4807,0],[2027.74,1.68,5.3891,0],[2028.00,1.70,6.2785,0]] },
+          { n:"Tianwen-1", status:"active", color:0xff9e7a, valid:"2020–2028", parent:"Mars", local:[1.55,0.02,1.2] },
+          { n:"Mars Express", status:"active", color:0xc9d4a8, valid:"2003–2028", parent:"Mars", local:[1.35,0.028,4.1] },
+          { n:"Akatsuki", status:"historic", color:0xf6d68a, valid:"2010–2024", parent:"Vénus", local:[2.0,0.024,2.6] },
+          { n:"JWST", status:"active", color:0xffe9a8, valid:"2021–2030", parent:"Terre", local:[3.5,0.006,0.7] },
+          { n:"Dawn", status:"historic", color:0xf2c4a2, valid:"2007–2018", route:[[2007.74,1.00,0.1197,0],[2008.20,1.21,2.3536,0],[2008.67,1.37,3.9905,0],[2009.13,1.52,5.2876,0],[2009.93,1.85,6.0108,0],[2010.74,2.12,6.5342,0],[2011.54,2.36,6.9457,0],[2012.77,2.52,7.5594,0],[2013.99,2.65,8.1061,0],[2015.22,2.77,8.6037,0],[2016.22,2.77,9.3018,0],[2017.22,2.77,10.0000,0],[2018.22,2.77,10.6981,0]] },
+        ];
+        const scene = new THREE.Scene(),
+          camera = new THREE.PerspectiveCamera(
+            46,
+            innerWidth / innerHeight,
+            0.1,
+            1000,
+          ),
+          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        app.insertBefore(renderer.domElement, app.firstChild);
+        scene.add(new THREE.HemisphereLight(0xaeb8ff, 0x171136, 1.15));
+        scene.add(new THREE.AmbientLight(0x6e76bf, 0.5));
+        const sunLight = new THREE.PointLight(0xfff4d5, 2400, 500);
+        scene.add(sunLight);
+        const sun = new THREE.Mesh(
+          new THREE.SphereGeometry(3.3, 40, 28),
+          new THREE.MeshBasicMaterial({ color: 0xffd77b }),
+        );
+        scene.add(sun);
+        const halo = new THREE.Mesh(
+          new THREE.SphereGeometry(6.2, 32, 20),
+          new THREE.MeshBasicMaterial({
+            color: 0xffd99a,
+            transparent: true,
+            opacity: 0.14,
+            depthWrite: false,
+          }),
+        );
+        scene.add(halo);
+        const stars = new THREE.BufferGeometry(),
+          pos = [];
+        for (let i = 0; i < 520; i++) {
+          const r = 220 + Math.random() * 300,
+            a = Math.random() * TAU,
+            z = Math.random() * 2 - 1,
+            s = Math.sqrt(1 - z * z);
+          pos.push(r * s * Math.cos(a), r * z, r * s * Math.sin(a));
+        }
+        stars.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(pos, 3),
+        );
+        scene.add(
+          new THREE.Points(
+            stars,
+            new THREE.PointsMaterial({
+              color: 0xdadfff,
+              size: 0.6,
+              transparent: true,
+              opacity: 0.58,
+            }),
+          ),
+        );
+        const selectable = [],
+          ray = new THREE.Raycaster(),
+          mouse = new THREE.Vector2();
+        function addHitZone(parent,body,radius) {
+          const hitZone=new THREE.Mesh(
+            new THREE.SphereGeometry(radius,12,8),
+            new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false})
+          );
+          hitZone.userData.body=body;
+          parent.add(hitZone); selectable.push(hitZone);
+        }
+        function makeTrail(color) {
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(new Float32Array(512 * 3), 3),
+          );
+          const material = new THREE.LineBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          });
+          const line = new THREE.Line(geometry, material);
+          line.frustumCulled = false;
+          line.visible = false;
+          scene.add(line);
+          return line;
+        }
+        function updateTrail(line, points, opacity) {
+          const positions = line.geometry.attributes.position.array;
+          points.forEach((point, index) => {
+            positions[index * 3] = point.x;
+            positions[index * 3 + 1] = point.y;
+            positions[index * 3 + 2] = point.z;
+          });
+          line.geometry.setDrawRange(0, points.length);
+          line.geometry.attributes.position.needsUpdate = true;
+          line.material.opacity = opacity;
+          line.visible = opacity > 0.006;
+        }
+        function surfaceTexture(b) {
+          const canvas = document.createElement("canvas"),
+            ctx = canvas.getContext("2d"),
+            w = 256,
+            h = 128,
+            base = new THREE.Color(b.c);
+          canvas.width = w;
+          canvas.height = h;
+          ctx.fillStyle = "#" + base.getHexString();
+          ctx.fillRect(0, 0, w, h);
+          let seed = b.n.split("").reduce((n, c) => n + c.charCodeAt(0), 1);
+          const rnd = () =>
+            (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+          if (b.n === "Terre") {
+            const g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, "#78b9df");
+            g.addColorStop(0.5, "#2774aa");
+            g.addColorStop(1, "#164b7c");
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+            for (let i = 0; i < 22; i++) {
+              ctx.save();
+              ctx.translate(rnd() * w, 18 + rnd() * (h - 36));
+              ctx.rotate((rnd() - 0.5) * 1.4);
+              ctx.scale(1.8 + rnd() * 2, 0.5 + rnd());
+              ctx.beginPath();
+              ctx.arc(0, 0, 5 + rnd() * 10, 0, TAU);
+              ctx.fillStyle = rnd() > 0.4 ? "#83a66f" : "#b5a77a";
+              ctx.globalAlpha = 0.72;
+              ctx.fill();
+              ctx.restore();
+            }
+            ctx.globalAlpha = 0.72;
+            ctx.fillStyle = "#eef5f7";
+            ctx.fillRect(0, 0, w, 8);
+            ctx.fillRect(0, h - 7, w, 7);
+          } else if (b.n === "Jupiter" || b.n === "Saturne") {
+            for (let y = 0; y < h; y += 5) {
+              const light = 0.08 + 0.12 * Math.sin(y * 0.22) + rnd() * 0.07,
+                red = b.n === "Jupiter" ? 126 : 172,
+                green = b.n === "Jupiter" ? 78 : 135,
+                blue = b.n === "Jupiter" ? 55 : 83;
+              ctx.fillStyle =
+                "rgba(" +
+                red +
+                "," +
+                green +
+                "," +
+                blue +
+                "," +
+                Math.max(0.04, light) +
+                ")";
+              ctx.fillRect(0, y, w, 3 + rnd() * 4);
+            }
+            if (b.n === "Jupiter") {
+              ctx.save();
+              ctx.translate(190, 78);
+              ctx.scale(2.2, 0.7);
+              ctx.beginPath();
+              ctx.arc(0, 0, 9, 0, TAU);
+              ctx.fillStyle = "rgba(174,79,54,.72)";
+              ctx.fill();
+              ctx.restore();
+            }
+          } else if (b.n === "Uranus" || b.n === "Neptune") {
+            const g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, "rgba(255,255,255,.22)");
+            g.addColorStop(0.45, "rgba(255,255,255,0)");
+            g.addColorStop(1, "rgba(24,29,112,.2)");
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+            for (let y = 8; y < h; y += 12) {
+              ctx.fillStyle = "rgba(255,255,255,.045)";
+              ctx.fillRect(0, y, w, 2);
+            }
+          } else if (b.n === "Vénus") {
+            for (let i = 0; i < 34; i++) {
+              ctx.strokeStyle =
+                "rgba(255,241,194," + (0.035 + rnd() * 0.08) + ")";
+              ctx.lineWidth = 2 + rnd() * 5;
+              ctx.beginPath();
+              const y = rnd() * h;
+              ctx.moveTo(-20, y);
+              ctx.bezierCurveTo(
+                55,
+                y - 25 + rnd() * 50,
+                170,
+                y - 25 + rnd() * 50,
+                w + 20,
+                y,
+              );
+              ctx.stroke();
+            }
+          } else {
+            for (let i = 0; i < 420; i++) {
+              const v = rnd() > 0.5 ? 255 : 25;
+              ctx.fillStyle =
+                "rgba(" +
+                v +
+                "," +
+                v +
+                "," +
+                v +
+                "," +
+                (0.018 + rnd() * 0.065) +
+                ")";
+              const s = 0.4 + rnd() * 2.6;
+              ctx.fillRect(rnd() * w, rnd() * h, s, s);
+            }
+            for (let i = 0; i < 18; i++) {
+              ctx.beginPath();
+              ctx.arc(rnd() * w, rnd() * h, 1 + rnd() * 5, 0, TAU);
+              ctx.strokeStyle = "rgba(35,24,31,.12)";
+              ctx.lineWidth = 1 + rnd() * 2;
+              ctx.stroke();
+            }
+          }
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.anisotropy = 4;
+          return texture;
+        }
+        // Pôle nord de chaque planète en coordonnées écliptiques (IAU) et période de rotation sidérale (jours,
+        // négative = rétrograde). C'est ce qui donne son inclinaison aux anneaux de Saturne et couche Uranus.
+        const AXES={ Mercure:[318.24,82.96,58.646], "Vénus":[30.19,88.76,-243.025], Terre:[90,66.56,0],
+          Mars:[354.84,64.60,1.02596], Jupiter:[247.82,87.78,0.41354], Saturne:[79.53,61.95,0.44401],
+          Uranus:[257.65,7.72,-0.71833], Neptune:[319.24,61.97,0.67125] };
+        function poleDirection(lambda, beta) { // écliptique -> repère de scène
+          const l=lambda*DEG, b=beta*DEG;
+          return new THREE.Vector3(Math.cos(b)*Math.cos(l), Math.sin(b), -Math.cos(b)*Math.sin(l));
+        }
+        let saturnRing=null;
+        bodies.forEach((b) => {
+          const axis=AXES[b.n];
+          b.tilt=new THREE.Quaternion().setFromUnitVectors(UP, poleDirection(axis[0],axis[1]));
+          b.spin=axis[2];
+          const orbitPoints=[];
+          for(let k=0;k<=192;k++) {
+            orbitPoints.push(planetPosition(b,(k/192)*b.p*365.25,new THREE.Vector3()));
+          }
+          scene.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(orbitPoints),
+            new THREE.LineBasicMaterial({color:0xc7ccff,transparent:true,opacity:.065,depthWrite:false})
+          ));
+          const m = new THREE.Mesh(
+            new THREE.SphereGeometry(b.size, 40, 28),
+            new THREE.MeshStandardMaterial({
+              color: 0xffffff,
+              map: surfaceTexture(b),
+              roughness: b.n === "Jupiter" || b.n === "Saturne" ? 0.58 : 0.8,
+              metalness: 0.02,
+            }),
+          );
+          m.userData.body = b;
+          scene.add(m);
+          b.mesh = m;
+          b.trail = makeTrail(b.c);
+          addHitZone(m,b,Math.max(2.8,b.size*1.8));
+          const l = document.createElement("div");
+          l.className = "label";
+          l.textContent = b.n;
+          labelsBox.appendChild(l);
+          b.label = l;
+          if (b.n === "Saturne") {
+            const inner=3.1, outer=4.5, ringGeometry=new THREE.RingGeometry(inner,outer,96);
+            // RingGeometry projette les UV à plat : on les repasse en radial pour la bande d'anneaux
+            const place=ringGeometry.attributes.position, uv=ringGeometry.attributes.uv, corner=new THREE.Vector3();
+            for(let i=0;i<place.count;i++) {
+              corner.fromBufferAttribute(place,i);
+              uv.setXY(i,(corner.length()-inner)/(outer-inner),0.5);
+            }
+            const ring = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({
+              color: 0xd8c9ab, side: THREE.DoubleSide, transparent: true, opacity: 0.76, depthWrite: false,
+            }));
+            ring.rotation.x = Math.PI / 2;
+            m.add(ring);
+            saturnRing = ring;
+          }
+        });
+        const spacecraft = [], missionList = document.getElementById("missionList"),
+          missionPanel = document.getElementById("missionPanel"),
+          missionToggle = document.getElementById("missionToggle"),
+          missionClose = document.getElementById("missionClose"),
+          showAllMissions = document.getElementById("showAllMissions"),
+          showAllSatellites = document.getElementById("showAllSatellites"),
+          selectionInfo = document.getElementById("selectionInfo"),
+          browser = document.getElementById("browser"),
+          viewTrigger = document.getElementById("viewTrigger"),
+          detail = document.getElementById("detail"),
+          detailToggle = document.getElementById("detailToggle"),
+          infoHeader = document.getElementById("infoHeader"),
+          sheetGrabber = document.getElementById("sheetGrabber");
+        let showAllSpacecraft = false, showEverySatellite = false, lastView = "missions";
+        function sceneRadius(au) { return 12 + Math.log1p(Math.max(0, au)) / Math.log1p(30.07) * 88; }
+        function decimalYear(d) {
+          const date = new Date(J2000 + d * 864e5), y = date.getUTCFullYear(),
+            start = Date.UTC(y,0,1), end = Date.UTC(y+1,0,1);
+          return y + (date.getTime()-start)/(end-start);
+        }
+        function dayForYear(year) {
+          const y=Math.floor(year), start=Date.UTC(y,0,1), end=Date.UTC(y+1,0,1);
+          return (start+(end-start)*(year-y)-J2000)/864e5;
+        }
+        function missionYears(m) {
+          const years=(m.valid.match(/\d{4}/g)||[]).map(Number);
+          return { start:m.launch||m.route?.[0]?.[0]||years[0], end:years[1]||years[0] };
+        }
+        function missionIsValid(m,d) { const y=decimalYear(d), limits=missionYears(m); return y>=limits.start&&y<=limits.end+1; }
+        function missionPosition(m, d, out) {
+          const limits=missionYears(m), y = Math.max(limits.start,Math.min(limits.end,decimalYear(d)));
+          if (m.parent) {
+            const p = bodies.find(b => b.n === m.parent), a = d * m.local[1] * TAU + m.local[2];
+            return out.set(p.mesh.position.x + Math.cos(a)*m.local[0], Math.sin(a*.7)*1.2, p.mesh.position.z + Math.sin(a)*m.local[0]);
+          }
+          let au, angle, latitude=null;
+          if (m.route) {
+            const route=m.route;
+            let i=0;
+            for(let k=0;k<route.length-1;k++) if(y>=route[k][0]&&y<=route[k+1][0]) { i=k; break; }
+            if(y>route[route.length-1][0]) i=route.length-2;
+            const p0=route[Math.max(0,i-1)], p1=route[i], p2=route[i+1], p3=route[Math.min(route.length-1,i+2)],
+              u=Math.max(0,Math.min(1,(y-p1[0])/(p2[0]-p1[0]||1)));
+            // Catmull-Rom sur chaque composante : les jonctions entre points de passage cessent d'être anguleuses
+            const spline=(c) => {
+              const a0=p0[c]||0, a1=p1[c]||0, a2=p2[c]||0, a3=p3[c]||0;
+              return .5*((2*a1)+(a2-a0)*u+(2*a0-5*a1+4*a2-a3)*u*u+(3*a1-a0-3*a2+a3)*u*u*u);
+            };
+            const clamp=(v,c) => Math.max(Math.min(p1[c]||0,p2[c]||0),Math.min(Math.max(p1[c]||0,p2[c]||0),v));
+            au=clamp(spline(1),1); angle=spline(2);
+            latitude=clamp(spline(3),3)*Math.PI/180;
+          } else if (m.orbit) {
+            const phase=(y-2000)*TAU/m.orbit[3]+m.orbit[2], mid=(m.orbit[0]+m.orbit[1])/2, amp=(m.orbit[1]-m.orbit[0])/2;
+            au=mid-amp*Math.cos(phase); angle=phase;
+          } else {
+            au=Math.max(m.r0, m.r0+(y-m.launch)*m.rate); angle=m.angle+(y-m.launch)*.018;
+          }
+          const r=sceneRadius(au);
+          if (latitude===null) { // sondes sans trajectoire détaillée : léger dévers pour ne pas être plates
+            const tilt=Math.sin(angle*.63+m.n.length)*Math.min(8,r*.1);
+            return out.set(Math.cos(angle)*r, tilt, -Math.sin(angle)*r);
+          }
+          const flat=Math.cos(latitude)*r; // latitude écliptique réelle : la sortie du plan se voit
+          return out.set(Math.cos(angle)*flat, Math.sin(latitude)*r, -Math.sin(angle)*flat);
+        }
+        missionSpecs.sort((a,b)=>missionYears(a).start-missionYears(b).start); // du plus ancien départ au plus récent
+        missionSpecs.forEach((m) => {
+          const group = new THREE.Group(), core = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.75,0),
+            new THREE.MeshStandardMaterial({color:m.color, emissive:m.color, emissiveIntensity:.35, metalness:.5, roughness:.35})
+          );
+          const glow = new THREE.Mesh(new THREE.SphereGeometry(1.55,16,10), new THREE.MeshBasicMaterial({color:m.color,transparent:true,opacity:.11,depthWrite:false}));
+          group.add(core,glow); group.userData.body=m; core.userData.body=m; m.mesh=group; m.isSpacecraft=true; m.trail=makeTrail(m.color);
+          scene.add(group); addHitZone(group,m,2.6); spacecraft.push(m);
+          const l=document.createElement("div"); l.className="label spacecraft-label"; l.textContent=m.n; labelsBox.appendChild(l); m.label=l;
+        });
+        // Éléments orbitaux réels (TLE Celestrak, époque 2026-08-23) rafraîchis au chargement quand le réseau répond
+        const satelliteSpecs = [
+          {n:"ISS", catnr:25544, color:0x9de9ff, icon:"▣", meta:"orbite basse", tle:[
+            "1 25544U 98067A   26235.72586232  .00009235  00000+0  17193-3 0  9995",
+            "2 25544  51.6333 325.8142 0007700  76.3746 283.8100 15.49592931582224"]},
+          {n:"Hubble", catnr:20580, color:0xb8b4ff, icon:"◫", meta:"orbite basse", tle:[
+            "1 20580U 90037B   26235.67030653  .00005845  00000+0  17957-3 0  9995",
+            "2 20580  28.4738 339.1086 0001996 161.2931 198.7739 15.31432859798927"]},
+          {n:"Tiangong", catnr:48274, color:0xffc88c, icon:"◇", meta:"orbite basse", tle:[
+            "1 48274U 21035A   26235.49167945  .00015233  00000+0  19266-3 0  9999",
+            "2 48274  41.4684 273.4428 0001586 254.2728 105.7935 15.59190448303679"]},
+          {n:"GPS", group:"gps-ops", max:40, color:0xa7f2c9, icon:"⌖", meta:"constellation · orbite moyenne", catnr:43873, tle:[
+            "1 43873U 18109A   26235.84148544 -.00000002  00000+0  00000+0 0  9991",
+            "2 43873  55.7246  89.5171 0039629 196.3831 177.0711  2.00564641 56437"]},
+          {n:"Starlink", group:"starlink", max:600, color:0xd8deff, icon:"✦", meta:"constellation · orbite basse", catnr:44714,
+            tle:["1 44714U 19074B   26235.64515039  .00082775  00000+0  94889-3 0  9991\n2 44714  53.1482 103.0949 0004855  78.1577 281.9981 15.61399163374712\n1 47901U 21021AT  26235.97947469  .00053589  00000+0  11278-2 0  9990\n2 47901  53.1519 189.7536 0002293  79.8732 280.2534 15.44790921302155\n1 49454U 21104AY  26236.26860517 -.00000551  00000+0 -51694-5 0  9990\n2 49454  53.1586 178.6724 0001227  93.6968 266.4175 15.34386022264180\n1 52102U 22029Q   26236.16862201 -.00000191  00000+0  55247-5 0  9999\n2 52102  53.1614  37.4925 0001265  91.7351 268.3796 15.33545624246205\n1 52986U 22076A   26235.75674920 -.00000117  00000+0  77722-5 0  9994\n2 52986  53.1606  53.6921 0001160  84.9077 275.2058 15.33546200228204\n1 53591U 22104D   26235.21256200  .00004189  00000+0  13082-3 0  9996\n2 53591  53.1581 208.4033 0001220  86.4594 273.6548 15.35424540221215\n1 54199U 22141AU  26236.21583350  .00000665  00000+0  29976-4 0  9997\n2 54199  53.1615 315.6078 0001149  84.4574 275.6560 15.35397452211377\n1 55647U 23021V   26235.11399071  .00000030  00000+0  10343-4 0  9991\n2 55647  70.0000 124.7013 0002816 268.4863  91.5973 14.98329222193726\n1 56474U 23064AC  26235.51388606  .00000245  00000+0  28293-4 0  9994\n2 56474  69.9995  64.0076 0002681 256.8049 103.2811 14.98333121180728\n1 57294U 23096E   26236.25002315  .00122236  00000+0  33459-2 0  9995\n2 57294  43.0018 356.2684 0001668 267.3388 347.6881 15.36178436  5913\n1 57939U 23148E   26236.28021587  .00050912  00000+0  14490-2 0  9999\n2 57939  53.1570 324.8627 0004780 337.3545  22.7246 15.35641130164099\n1 58493U 23186W   26235.97942711  .00001675  00000+0  70383-4 0  9990\n2 58493  43.0009 198.6554 0001380 267.3338  92.7356 15.27576753151477\n1 59156U 24044E   26236.08251633  .00000338  00000+0  21801-4 0  9996\n2 59156  43.0023 245.3459 0001154 293.2749  66.7981 15.27573191139123\n1 59632U 24082B   26236.09360043 -.00000101  00000+0  58578-5 0  9995\n2 59632  43.0000 260.2887 0001139 264.0376  96.0346 15.27576651130613\n1 60150U 24120R   26236.06018968 -.00000186  00000+0  56418-5 0  9992\n2 60150  53.1583 260.2156 0001035  92.1156 267.9965 15.34386074122037\n1 61528U 24183V   26235.99843211  .00002730  00000+0  99662-4 0  9992\n2 61528  53.1591  84.9156 0001179  92.2021 267.9115 15.31716273105277\n1 62151U 24224N   26236.18565583  .00020590  00000+0  75511-3 0  9996\n2 62151  42.9991 292.4055 0001639 281.6911  78.3757 15.27603040 98096\n1 62857U 25022D   26235.83025979  .00026392  00000+0  78919-3 0  9998\n2 62857  53.1576  70.8900 0001164  89.6287 270.4849 15.34412142 87526\n1 63436U 25069D   26235.99108396  .00008505  00000+0  26253-3 0  9995\n2 63436  53.1588  76.5362 0001333 104.5100 255.6050 15.34402654 79142\n1 63927U 25098B   26235.63867542  .00003004  00000+0  25938-3 0  9996\n2 63927  69.9994 213.3597 0003189 271.5820  88.4974 14.98339515 71579\n1 64348U 25126E   26235.69850377  .00003434  00000+0  29540-3 0  9990\n2 64348  70.0031 333.5520 0003194 269.4349  90.6444 14.98340684 65693\n1 64952U 25158W   26236.04638591  .00002614  00000+0  18497-3 0  9996\n2 64952  97.2833  95.2472 0001825  70.4680 289.6745 15.05661192 60531\n1 65514U 25198Y   26235.94105992  .00019760  00000+0  59434-3 0  9993\n2 65514  53.1565 212.2392 0000739 311.9757  48.1182 15.34404081 54251\n1 66091U 25236F   26236.25002315  .00026199  00000+0  80540-3 0  9993\n2 66091  53.1586  45.1782 0001837  91.6485 293.2808 15.33538179  5878\n1 66509U 25263AA  26235.74753276  .00007268  00000+0  27334-3 0  9997\n2 66509  43.0010 127.6374 0002169 306.4539  53.6112 15.27583330 44445\n1 67088U 25298P   26235.66071903  .00002363  00000+0  20573-3 0  9998\n2 67088  70.0017 313.6363 0003550 268.6627  91.4125 14.98336917 38229\n1 67659U 26022M   26236.07227068  .00018553  00000+0  57540-3 0  9991\n2 67659  97.2862 268.0266 0001938 104.0776 256.0682 15.33454418 31220\n1 68093U 26042AA  26235.97035651  .00018150  00000+0  54686-3 0  9990\n2 68093  53.1574 118.3820 0001534  91.2000 268.9178 15.34408930 27952\n1 68705U 26081G   26235.28330313  .00010798  00000+0  33032-3 0  9992\n2 68705  53.1618 337.8353 0001218  81.0976 279.0165 15.34394116 20286\n1 69329U 26122A   26236.02375270  .00017895  00000+0  55510-3 0  9995\n2 69329  97.2854 264.9649 0002118 123.8765 236.2680 15.33456462 12582"]},
+        ], satellites=[], satelliteOrbits=new THREE.Group();
+        scene.add(satelliteOrbits);
+        const satellitePanel=document.getElementById("satellitePanel"), satelliteList=document.getElementById("satelliteList"),
+          launchPanel=document.getElementById("launchPanel"), launchList=document.getElementById("launchList");
+        // Repère inertiel (TEME) -> repère de scène : z_eci = nord, altitude comprimée, inclinaison de l'axe
+        function eciToScene(p,out) {
+          out.set(p.x,p.z,-p.y);
+          const km=out.length();
+          return out.multiplyScalar(orbitSceneRadius(km)/km).applyQuaternion(earthTilt);
+        }
+        // Temps sidéral de Greenwich (rad) : cale la rotation du globe sur le repère inertiel
+        function gmst(d) { return 4.894961212735792+6.300388098984957*d; }
+        function satellitePosition(spec,date,out) {
+          try {
+            const pv=satellite.propagate(spec.satrec,date);
+            if(!pv||!pv.position) return null;
+            spec.altitudeKm=satellite.eciToGeodetic(pv.position,satellite.gstime(date)).height;
+            return eciToScene(pv.position,out);
+          } catch(e) { return null; }
+        }
+        // Pastille lumineuse pour les constellations : dégradé radial, pas de modèle 3D
+        function dotSprite() {
+          const canvas=document.createElement("canvas"); canvas.width=canvas.height=64;
+          const ctx=canvas.getContext("2d"), grd=ctx.createRadialGradient(32,32,0,32,32,32);
+          grd.addColorStop(0,"rgba(255,255,255,1)");
+          grd.addColorStop(.22,"rgba(255,255,255,.9)");
+          grd.addColorStop(.5,"rgba(255,255,255,.3)");
+          grd.addColorStop(1,"rgba(255,255,255,0)");
+          ctx.fillStyle=grd; ctx.fillRect(0,0,64,64);
+          const texture=new THREE.CanvasTexture(canvas); texture.colorSpace=THREE.SRGBColorSpace; return texture;
+        }
+        const constellationSprite=dotSprite(), TLE_TTL=432e5, memberScratch=new THREE.Vector3();
+        function cachedTle(key,allowStale) {
+          try { const raw=localStorage.getItem("tle:"+key); if(!raw) return null;
+            const entry=JSON.parse(raw);
+            if(!looksLikeTle(entry.text)) return null;
+            return allowStale||Date.now()-entry.t<TLE_TTL?entry.text:null; } catch(e) { return null; }
+        }
+        function looksLikeTle(text) { return /(^|\n)1 \d{5}/.test(text||""); }
+        function cacheTle(key,text) { try { localStorage.setItem("tle:"+key,JSON.stringify({t:Date.now(),text})); } catch(e) {} }
+        // Le jeu Starlink pèse 1,8 Mo : on coupe le flux dès qu'on a assez de lignes
+        async function fetchTleText(url,maxBytes) {
+          const res=await fetch(url,{cache:"no-store"});
+          if(!maxBytes||!res.body||!res.body.getReader) return res.text();
+          const reader=res.body.getReader(), decoder=new TextDecoder(); let text="";
+          while(text.length<maxBytes) {
+            const {done,value}=await reader.read();
+            if(done) break;
+            text+=decoder.decode(value,{stream:true});
+          }
+          try { await reader.cancel(); } catch(e) {}
+          return text;
+        }
+        // Colonnes 10-11 du TLE : les deux chiffres de l'année de lancement (57-99 = 19xx)
+        function launchYear(line1) {
+          const yy=parseInt(line1.slice(9,11),10);
+          return isNaN(yy)?null:(yy>=57?1900+yy:2000+yy);
+        }
+        function parseTleSet(text,max) {
+          const lines=(text||"").split("\n").map(l=>l.trim()), members=[];
+          for(let i=0;i+1<lines.length&&members.length<max;i++) {
+            if(lines[i].startsWith("1 ")&&lines[i+1].startsWith("2 ")) {
+              const satrec=satellite.twoline2satrec(lines[i],lines[i+1]);
+              if(!satrec.error) members.push({name:(lines[i-1]||"").trim(),satrec,launch:launchYear(lines[i])});
+              i++;
+            }
+          }
+          return members;
+        }
+        function updateConstellation(spec,date,sceneYear,sceneDay) {
+          const positions=spec.mesh.geometry.attributes.position.array;
+          let altitudeSum=0, alive=0, radiusSum=0;
+          const year=sceneYear;
+          spec.members.forEach((member,index) => {
+            let position=null;
+            try {
+              if(member.launch&&year<member.launch) throw 0; // pas encore lancé
+              const pv=satellite.propagate(member.satrec,date);
+              if(pv&&pv.position) {
+                altitudeSum+=Math.hypot(pv.position.x,pv.position.y,pv.position.z)-EARTH_KM; alive++;
+                position=eciToScene(pv.position,memberScratch);
+                radiusSum+=position.length();
+              }
+            } catch(e) {}
+            const o=index*3;
+            positions[o]=position?position.x:0; // au centre du globe = invisible
+            positions[o+1]=position?position.y:0;
+            positions[o+2]=position?position.z:0;
+          });
+          spec.mesh.geometry.attributes.position.needsUpdate=true;
+          spec.aliveCount=alive;
+          if(alive) { spec.altitudeKm=altitudeSum/alive; spec.frameDist=Math.max(5,radiusSum/alive*2.8); }
+          spec.constellationDay=sceneDay;
+        }
+        function buildSatelliteOrbit(spec,date) {
+          const minutes=TAU/spec.satrec.no, points=[], step=minutes/180;
+          for(let k=0;k<=180;k++) {
+            const p=satellitePosition(spec,new Date(date.getTime()+k*step*60000),new THREE.Vector3());
+            if(p) points.push(p);
+          }
+          if(points.length<8) return;
+          spec.orbit.geometry.dispose();
+          spec.orbit.geometry=new THREE.BufferGeometry().setFromPoints(points);
+          spec.ringDay=day; // repère sur la date de scène, pas sur la date de propagation bornée
+        }
+        function makeSatelliteModel(spec) {
+          if(spec.group) { // constellation : un nuage de points, pas de maquette
+            const points=new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({
+              size:.06, map:constellationSprite, color:spec.color, transparent:true,
+              depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true
+            }));
+            points.frustumCulled=false; points.visible=false; scene.add(points);
+            spec.mesh=points; spec.isSatellite=true; spec.members=[]; spec.frameDist=12;
+            return spec;
+          }
+          const group=new THREE.Group(),
+            hull=new THREE.MeshStandardMaterial({color:0xdfe5f5,metalness:.65,roughness:.3}),
+            panel=new THREE.MeshStandardMaterial({color:0x1d2f78,metalness:.35,roughness:.28,emissive:0x2246c8,emissiveIntensity:.5});
+          const body=new THREE.Mesh(new THREE.BoxGeometry(.06,.055,.085),hull),
+            boom=new THREE.Mesh(new THREE.CylinderGeometry(.006,.006,.3,6),hull),
+            wing=new THREE.BoxGeometry(.11,.005,.062);
+          boom.rotation.z=Math.PI/2;
+          const left=new THREE.Mesh(wing,panel), right=new THREE.Mesh(wing,panel);
+          left.position.x=-.096; right.position.x=.096;
+          group.add(body,boom,left,right);
+          if(spec.n==="ISS") { // truss plus long, quatre panneaux
+            const l2=new THREE.Mesh(wing,panel), r2=new THREE.Mesh(wing,panel);
+            l2.position.set(-.096,0,.075); r2.position.set(.096,0,.075);
+            left.position.z=-.075; right.position.z=-.075;
+            group.add(l2,r2);
+          }
+          if(spec.n==="GPS III") { const dish=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.012,14),hull); dish.position.y=-.04; group.add(dish); }
+          spec.dim=(on) => { // estompe la maquette quand la position n'est plus garantie
+            if(spec.dimmed===on) return;
+            spec.dimmed=on;
+            [hull,panel].forEach(m => { m.transparent=on; m.opacity=on?.45:1; m.needsUpdate=true; });
+          };
+          spec.orbit=new THREE.Line(new THREE.BufferGeometry(),
+            new THREE.LineBasicMaterial({color:spec.color,transparent:true,opacity:.28,depthWrite:false}));
+          spec.orbit.visible=false;
+          satelliteOrbits.add(spec.orbit);
+          group.userData.body=spec; spec.mesh=group; spec.isSatellite=true; scene.add(group); addHitZone(group,spec,.32);
+          const label=document.createElement("div"); label.className="label spacecraft-label"; label.textContent=spec.n; labelsBox.appendChild(label); spec.label=label;
+          return spec;
+        }
+        const earth=bodies.find(b=>b.n==="Terre"), EARTH_RADIUS=earth.size;
+        const EARTH_TILT=THREE.MathUtils.degToRad(23.44),
+          // L'obliquité bascule autour de la ligne des équinoxes (axe X du repère écliptique)
+          earthTilt=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-EARTH_TILT),
+          eciScratch=new THREE.Vector3();
+        // lat/lon -> repère local de la sphère (UV équirectangulaire de THREE.SphereGeometry)
+        function geoToLocal(lat, lon, radius) {
+          const phi=(lon+180)*Math.PI/180, theta=(90-lat)*Math.PI/180;
+          return new THREE.Vector3(-radius*Math.cos(phi)*Math.sin(theta), radius*Math.cos(theta), radius*Math.sin(phi)*Math.sin(theta));
+        }
+        // Point de géolocalisation de l'utilisateur, posé sur le globe et solidaire de sa rotation
+        const HOME_COLOR=0x4da3ff, homeMarker=new THREE.Group();
+        const homeDot=new THREE.Mesh(new THREE.SphereGeometry(.045,14,10), new THREE.MeshBasicMaterial({color:HOME_COLOR}));
+        const homeHalo=new THREE.Mesh(new THREE.RingGeometry(.075,.115,28), new THREE.MeshBasicMaterial({color:HOME_COLOR,transparent:true,opacity:.6,side:THREE.DoubleSide,depthWrite:false}));
+        homeHalo.rotation.x=-Math.PI/2; homeHalo.position.y=.005; homeMarker.add(homeDot,homeHalo);
+        earth.mesh.add(homeMarker);
+        let homePosition=null;
+        function setHome(lat, lon) {
+          homePosition={lat,lon};
+          const normal=geoToLocal(lat,lon,1);
+          homeMarker.position.copy(normal).multiplyScalar(EARTH_RADIUS);
+          homeMarker.quaternion.setFromUnitVectors(UP,normal);
+        }
+        satelliteSpecs.forEach(s=>satellites.push(makeSatelliteModel(s)));
+        const satelliteNote=satellitePanel.querySelector(".panel-note"), sgp4Ready=typeof satellite!=="undefined";
+        const SGP4_WINDOW=45; // jours : au-delà, SGP4 diverge (surtout en rétro-propagation, à cause de la traînée)
+        // Hors de la fenêtre, on gèle la propagation à son bord : orbites justes, position non synchronisée
+        function propagationDay() {
+          return tleEpochDay===null?day:Math.max(tleEpochDay-SGP4_WINDOW,Math.min(tleEpochDay+SGP4_WINDOW,day));
+        }
+        let tleEpochDay=null, noteOutOfRange=false, lastBornSignature="", todayDodged=false;
+        function tleUsable() { return tleEpochDay===null||Math.abs(day-tleEpochDay)<=SGP4_WINDOW; }
+        function formatDate(d) { return d.toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"}); }
+        function updateSatelliteNote() {
+          if(!sgp4Ready) { satelliteNote.textContent="Moteur SGP4 indisponible · connexion requise"; return; }
+          if(tleEpochDay===null) { satelliteNote.textContent="Chargement des éléments orbitaux…"; return; }
+          const epoch=formatDate(new Date(J2000+tleEpochDay*864e5));
+          satelliteNote.textContent=tleUsable()
+            ? "Propagation SGP4 · TLE du "+epoch
+            : "Positions indicatives · loin du TLE du "+epoch;
+        }
+        async function loadSatelliteElements() {
+          if(!sgp4Ready) { updateSatelliteNote(); return; }
+          await Promise.all(satellites.map(async (s) => {
+            const key=s.group||String(s.catnr),
+              url="https://celestrak.org/NORAD/elements/gp.php?"+(s.group?"GROUP="+s.group:"CATNR="+s.catnr)+"&FORMAT=TLE";
+            let text=cachedTle(key);
+            if(!text) { // Celestrak répond « data has not updated » si on redemande trop tôt : on garde alors la copie locale
+              try {
+                const fetched=await fetchTleText(url,s.group?s.max*180:0);
+                if(looksLikeTle(fetched)) { text=fetched; cacheTle(key,fetched); }
+              } catch(e) {}
+              if(!text) text=cachedTle(key,true);
+            }
+            if(s.group) { // constellation : tout le jeu, plafonné
+              s.members=parseTleSet(text,s.max);
+              if(!s.members.length) s.members=parseTleSet(s.tle.join("\n"),s.max);
+              s.mesh.geometry.setAttribute("position",new THREE.BufferAttribute(new Float32Array(s.members.length*3),3));
+              s.satrec=s.members[0]?.satrec||null;
+              if(!s.satrec) return;
+              s.inclinationDeg=s.members.reduce((sum,m)=>sum+m.satrec.inclo,0)/s.members.length*180/Math.PI;
+              s.epochDay=s.satrec.jdsatepoch+(s.satrec.jdsatepochF||0)-2451545;
+              updateConstellation(s,new Date(J2000+propagationDay()*864e5),decimalYear(day),day);
+              return;
+            }
+            s.satrec=(parseTleSet(text,1)[0]||parseTleSet(s.tle.join("\n"),1)[0]||{}).satrec||null;
+            if(!s.satrec) return;
+            s.epochDay=s.satrec.jdsatepoch+(s.satrec.jdsatepochF||0)-2451545;
+            s.inclinationDeg=s.satrec.inclo*180/Math.PI;
+            s.launch=launchYear(s.tle[0]);
+            satellitePosition(s,new Date(J2000+day*864e5),new THREE.Vector3()); // amorce l'altitude affichée
+          }));
+          const epochs=satellites.filter(s=>s.satrec).map(s=>s.epochDay);
+          tleEpochDay=epochs.length?epochs.reduce((a,b)=>a+b,0)/epochs.length:null;
+          updateSatelliteNote(); renderSatelliteList();
+        }
+        setHome(48.8566, 2.3522); // repli si la géolocalisation est refusée
+        if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+          (pos) => setHome(pos.coords.latitude, pos.coords.longitude),
+          () => {},
+          { enableHighAccuracy:false, timeout:8000, maximumAge:600000 }
+        );
+        const LAUNCH_COLORS=[0xffb77b,0xa7f2c9,0xb8b4ff,0x9de9ff,0xffc88c,0xd8deff,0xf8cb91,0x8de6c4];
+        function cachedLaunches() {
+          try { const raw=localStorage.getItem("launches"); if(!raw) return null;
+            const entry=JSON.parse(raw); return Date.now()-entry.t<36e5?entry.list:null; } catch(e) { return null; }
+        }
+        function cacheLaunches(list) {
+          try { localStorage.setItem("launches",JSON.stringify({t:Date.now(),list})); } catch(e) {}
+        }
+        function mapLaunch(item,index) { // Launch Library -> format de la scène
+          const pad=item.pad||{}, place=pad.location||{}, mission=item.mission||{},
+            lat=parseFloat(pad.latitude), lon=parseFloat(pad.longitude);
+          if(!isFinite(lat)||!isFinite(lon)) return null;
+          const rocket=(item.name||"").split("|")[0].trim(),
+            payload=mission.name||(item.name||"").split("|").pop().trim(),
+            site=(place.name||pad.name||"").split(",")[0];
+          return { n:payload, meta:site+" · "+rocket, detail:mission.description||"",
+            lat, lon, iso:item.net, status:(item.status||{}).abbrev||"",
+            color:LAUNCH_COLORS[index%LAUNCH_COLORS.length], icon:"↑" };
+        }
+        async function loadLaunches() { // vrais prochains tirs, cache d'une heure
+          let list=cachedLaunches();
+          if(!list) {
+            try {
+              const answer=await (await fetch("https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=10&hide_recent_previous=true")).json();
+              list=(answer.results||[]).map(mapLaunch).filter(Boolean);
+              if(list.length) cacheLaunches(list);
+            } catch(e) { list=null; }
+          }
+          if(!list||!list.length) return;
+          launchSpecs.length=0;
+          list.forEach(l=>launchSpecs.push({...l,date:new Date(l.iso)}));
+          renderLaunchList();
+        }
+        const launchSpecs=[
+          {n:"Prochaine mission orbitale", meta:"Cap Canaveral · lanceur lourd", agency:"États-Unis", offset:18.4, color:0xffb77b, icon:"↑", lat:28.5623, lon:-80.5774},
+          {n:"Mission d’observation", meta:"Kourou · lanceur européen", agency:"Europe", offset:53.2, color:0xa7f2c9, icon:"↑", lat:5.2360, lon:-52.7683},
+          {n:"Mission lunaire", meta:"Tanegashima · lanceur H3", agency:"Japon", offset:91.7, color:0xb8b4ff, icon:"↑", lat:30.4009, lon:130.9694},
+        ];
+        // Trajectoire de lancement : filet néon (coeur fin + halo additif) qui s'efface vers le transparent
+        const ARC_SEGMENTS=110, ARC_RADIAL=8, launchArc=new THREE.Group();
+        const LAUNCH_DIVE=-0.7; // instant où la caméra replonge, une fois la date calée
+        let launchCurve=null, launchClock=0, launchSettled=0;
+        function arcMesh(blending, opacity) {
+          const mesh=new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+            vertexColors:true, transparent:true, depthWrite:false, side:THREE.DoubleSide, blending, opacity
+          }));
+          launchArc.add(mesh); return mesh;
+        }
+        const arcGlow=arcMesh(THREE.AdditiveBlending,1), arcCore=arcMesh(THREE.NormalBlending,1);
+        launchArc.visible=false; earth.mesh.add(launchArc);
+        const launchHead=new THREE.Mesh(new THREE.SphereGeometry(.012,10,8),
+            new THREE.MeshBasicMaterial({color:0xffffff})),
+          launchHalo=new THREE.Mesh(new THREE.SphereGeometry(.021,12,10),
+            new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.35,depthWrite:false,blending:THREE.AdditiveBlending}));
+        launchHead.add(launchHalo); launchHead.visible=false; earth.mesh.add(launchHead);
+        function shapeArc(mesh, curve, radius, color, peak, falloff) {
+          const geometry=new THREE.TubeGeometry(curve,ARC_SEGMENTS,radius,ARC_RADIAL,false),
+            base=new THREE.Color(color), colors=new Float32Array((ARC_SEGMENTS+1)*(ARC_RADIAL+1)*4);
+          for(let i=0;i<=ARC_SEGMENTS;i++) {
+            const alpha=peak*Math.pow(1-i/ARC_SEGMENTS,falloff);
+            for(let j=0;j<=ARC_RADIAL;j++) {
+              const o=(i*(ARC_RADIAL+1)+j)*4;
+              colors[o]=base.r; colors[o+1]=base.g; colors[o+2]=base.b; colors[o+3]=alpha;
+            }
+          }
+          geometry.setAttribute("color", new THREE.BufferAttribute(colors,4));
+          mesh.geometry.dispose(); mesh.geometry=geometry;
+        }
+        function buildLaunchArc(points, color) {
+          const core=new THREE.Color(color).lerp(new THREE.Color(0xffffff),.55); // coeur incandescent
+          launchCurve=new THREE.CatmullRomCurve3(points);
+          shapeArc(arcGlow,launchCurve,.012,color,.34,1.4);
+          shapeArc(arcCore,launchCurve,.0035,core,1,1.1);
+          launchHead.material.color.set(core);
+          launchHalo.material.color.set(color);
+        }
+        // Le décollage se rejoue en boucle : la traînée se dessine derrière une tête lumineuse
+        function paintLaunchProgress(mesh, peak, falloff, progress) {
+          const attribute=mesh.geometry.attributes.color, array=attribute.array;
+          const settle=Math.max(0,Math.min(1,(progress-.72)/.28)); // vers l'état final : traînée complète
+          for(let i=0;i<=ARC_SEGMENTS;i++) {
+            const u=i/ARC_SEGMENTS, behind=progress-u,
+              comet=Math.exp(-behind*5.5),
+              alpha=behind<0?0:peak*Math.pow(1-u,falloff)*(comet+(1-comet)*settle);
+            for(let j=0;j<=ARC_RADIAL;j++) array[(i*(ARC_RADIAL+1)+j)*4+3]=alpha;
+          }
+          attribute.needsUpdate=true;
+        }
+        let selectedLaunch=null;
+        function renderSatelliteList() {
+          satelliteList.innerHTML="";
+          satellites.forEach(s=>{ const card=document.createElement("button"); card.className="object-card"+(selected===s?" selected":""); card.style.setProperty("--accent","#"+new THREE.Color(s.color).getHexString());
+            card.innerHTML='<span class="object-icon">'+s.icon+'</span><span class="object-copy"><span class="object-name">'+s.n+'</span><span class="object-meta">'+satelliteMeta(s)+'</span></span>';
+            card.onclick=()=>{ // se placer du côté du satellite, sinon il se retrouve derrière la Terre
+              setSelected(s);
+              const offset=new THREE.Vector3();
+              if(!s.group&&s.satrec&&satellitePosition(s,new Date(J2000+propagationDay()*864e5),offset)&&offset.lengthSq()>0)
+                aimCamera(Math.atan2(offset.x,offset.z)+.3,
+                  THREE.MathUtils.clamp(Math.asin(offset.y/offset.length())+.12,.12,1.25));
+              else aimCamera(1.05,.32);
+              closeBrowser();
+            }; satelliteList.appendChild(card); });
+        }
+        function satelliteMeta(s) {
+          if(s.launch&&decimalYear(day)<s.launch) return "lancé en "+s.launch;
+          if(s.group&&s.aliveCount===0) return "aucun de ces satellites à cette date";
+          if(!s.satrec||s.altitudeKm===undefined) return s.meta;
+          const orbit=Math.round(s.altitudeKm).toLocaleString("fr-FR")+" km · "+s.inclinationDeg.toFixed(1).replace(".",",")+"°";
+          if(!s.group) return orbit;
+          return s.aliveCount+(s.aliveCount>1?" satellites · ":" satellite · ")+orbit;
+        }
+        function countdownText(date) { const ms=date-Date.now(); if(ms<=0)return "En cours"; const h=Math.floor(ms/36e5), d=Math.floor(h/24); return d?"J−"+d+" · "+(h%24)+" h":"T−"+h+" h"; }
+        function renderLaunchList() {
+          launchList.innerHTML="";
+          launchSpecs.forEach((l,i)=>{ if(!l.date)l.date=l.iso?new Date(l.iso):new Date(Date.now()+l.offset*36e5); const card=document.createElement("button"); card.className="object-card"+(selectedLaunch===l?" selected":""); card.style.setProperty("--accent","#"+new THREE.Color(l.color).getHexString());
+            const when=l.status&&l.status!=="Go"?l.status:countdownText(l.date);
+            card.innerHTML='<span class="object-icon">'+l.icon+'</span><span class="object-copy"><span class="object-name">'+l.n+'</span><span class="object-meta">'+l.meta+'</span></span><span class="launch-time"><span class="launch-count">'+when+'</span><span class="launch-date">'+l.date.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+'</span></span>';
+            card.onclick=()=>selectLaunch(l,i); launchList.appendChild(card); });
+        }
+        function selectLaunch(l,index) {
+          selectedLaunch=l; setSelected(earth); selectedLaunch=l; iname.textContent=l.n; sub.textContent=l.meta; setDetail(l.n,l.detail); goalDist=12;
+          const normal=geoToLocal(l.lat,l.lon,1);
+          let east=new THREE.Vector3().crossVectors(UP,normal);
+          if(east.lengthSq()<1e-6) east.set(1,0,0);
+          east.normalize();
+          // Ascension réelle : vertical puis basculement, 400 km d'altitude et ~20° de distance au sol
+          const points=[]; for(let k=0;k<=48;k++){ const u=k/48,
+            altitude=400*Math.pow(u,.62), downrange=20*DEG*Math.pow(u,1.9);
+            points.push(normal.clone().multiplyScalar(Math.cos(downrange))
+              .add(east.clone().multiplyScalar(Math.sin(downrange)))
+              .multiplyScalar(orbitSceneRadius(EARTH_KM+altitude)));
+          }
+          buildLaunchArc(points,l.color); launchArc.visible=true;
+          closeBrowser(); // place à la scène
+          launchClock=-1.6; launchSettled=0; // recul, changement de date, plongée, puis mise à feu
+          const targetDay=l.date?(l.date.getTime()-J2000)/864e5:day;
+          if(l.date) animateDateTo(targetDay,HANDLE_REST,restCenter(targetDay));
+          // Le globe aura tourné d'ici la date de tir : on vise son orientation d'arrivée, pas celle de maintenant
+          const arrival=new THREE.Quaternion().copy(earthTilt)
+            .multiply(new THREE.Quaternion().setFromAxisAngle(UP,gmst(targetDay)));
+          const heading=normal.clone().applyQuaternion(arrival);
+          aimCamera(Math.atan2(heading.x,heading.z)+.85,.28); // décalage : la trajectoire se lit de profil
+          goalDist=10; // on prend du recul le temps que la date défile
+          renderLaunchList();
+        }
+        function setExploreView(view) {
+          document.querySelectorAll(".explore-tab").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
+          viewTrigger.textContent = VIEW_GLYPH[view] || VIEW_GLYPH.none;
+          browser.classList.toggle("closed", view === "none");
+          if (view !== "none") lastView = view;
+          missionPanel.classList.toggle("closed",view!=="missions"); satellitePanel.classList.toggle("closed",view!=="satellites"); launchPanel.classList.toggle("closed",view!=="launches");
+          if(view==="satellites"){ setSelected(earth); goalDist=9; updateSatelliteNote(); renderSatelliteList(); }
+          if(view!=="launches"){ selectedLaunch=null; launchArc.visible=false; launchHead.visible=false; } else { renderLaunchList(); }
+        }
+        document.querySelectorAll(".explore-tab").forEach(b=>b.onclick=()=>setExploreView(b.dataset.view));
+        function renderMissionList() {
+          missionList.innerHTML="";
+          spacecraft.forEach(m=>{
+            const chip=document.createElement("button"); chip.className="mission-chip"+(selected===m?" selected":"");
+            const name=document.createElement("span"), dates=document.createElement("span");
+            name.className="mission-chip-name"; name.textContent=m.n; dates.className="mission-chip-dates"; dates.textContent=m.valid;
+            chip.append(name,dates); chip.onclick=()=>{
+              // Sonde hors de sa période : on cale la date sur sa fin de mission, sinon il n'y a rien à voir
+              const years=missionYears(m),
+                first=dayForYear(years.start), last=dayForYear(years.end+1)-1,
+                today=(Date.now()-J2000)/864e5,
+                // dans sa période : on ne bouge pas. Sinon aujourd'hui si la mission court encore, sinon sa borne
+                targetDay=day>=first&&day<=last?day
+                  :today>=first&&today<=last?today
+                  :day<first?first:last;
+              if(targetDay!==day) animateDateTo(targetDay,HANDLE_REST,restCenter(targetDay));
+              const where=missionPosition(m,targetDay,new THREE.Vector3());
+              aimCamera(Math.atan2(where.x,where.z)+Math.PI/2,.42); setSelected(m);
+            }; missionList.appendChild(chip);
+          });
+          spacecraft.forEach(m=>{ m.mesh.visible=(selected===m||showAllSpacecraft)&&missionIsValid(m,day); m.label.style.display="none"; });
+        }
+        missionToggle.onclick=()=>{
+          missionPanel.classList.remove("closed"); missionToggle.style.display="none"; missionToggle.setAttribute("aria-expanded","true");
+        };
+        missionClose.onclick=()=>setExploreView("none");
+        document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>setExploreView("none"));
+        showAllMissions.onchange=()=>{ showAllSpacecraft=showAllMissions.checked; renderMissionList(); };
+        showAllSatellites.onchange=()=>{ showEverySatellite=showAllSatellites.checked; renderSatelliteList(); };
+        // 5e valeur = période orbitale réelle en jours (négative = orbite rétrograde)
+        const moonSpecs = {
+          Terre: [["Lune", 3.1, 0.42, 0xc9cfdf, 27.32]],
+          Mars: [
+            ["Phobos", 2, 0.18, 0x9c887a, 0.319],
+            ["Deimos", 2.7, 0.13, 0xa99b91, 1.263],
+          ],
+          Jupiter: [
+            ["Io", 4, 0.28, 0xe2c17e, 1.769],
+            ["Europe", 5.1, 0.25, 0xd8d2bd, 3.551],
+            ["Ganymède", 6.3, 0.34, 0xaaa092, 7.155],
+            ["Callisto", 7.6, 0.32, 0x80776e, 16.689],
+          ],
+          Saturne: [
+            ["Mimas", 4, 0.16, 0xd8d8d2, 0.942],
+            ["Encelade", 4.8, 0.18, 0xe8eef2, 1.37],
+            ["Téthys", 5.6, 0.21, 0xd7d5ce, 1.888],
+            ["Dioné", 6.5, 0.21, 0xbfbdb7, 2.737],
+            ["Rhéa", 7.5, 0.26, 0xa9a59f, 4.518],
+            ["Titan", 9, 0.38, 0xd49f54, 15.945],
+            ["Japet", 10.5, 0.23, 0x8c8175, 79.32],
+          ],
+          Uranus: [
+            ["Miranda", 3, 0.15, 0xc9cbd0, 1.413],
+            ["Ariel", 4, 0.2, 0xd9d9d4, 2.52],
+            ["Umbriel", 5, 0.2, 0x7c7a79, 4.144],
+            ["Titania", 6.2, 0.25, 0xb9afa5, 8.706],
+            ["Obéron", 7.4, 0.24, 0x8f8984, 13.463],
+          ],
+          Neptune: [
+            ["Protée", 3, 0.18, 0x85827e, 1.122],
+            ["Triton", 5, 0.32, 0xbec3ca, -5.877],
+            ["Néréide", 7, 0.16, 0x9e9fa3, 360.14],
+          ],
+        };
+        function moonAngle(moon, d) { return moon.phase + (d / moon.period) * TAU; }
+        // Voisinage terrestre : les altitudes sont comprimées en log pour rester cohérentes avec la Lune
+        // (surface < LEO < MEO < GEO < Lune). La direction, elle, reste exacte : la trace au sol est juste.
+        const ORBIT_H=400, MOON_KM=384400, EARTH_KM=6371,
+          ORBIT_SCALE=(moonSpecs.Terre[0][1]-EARTH_RADIUS)/Math.log1p((MOON_KM-EARTH_KM)/ORBIT_H);
+        function orbitSceneRadius(km) {
+          return EARTH_RADIUS+ORBIT_SCALE*Math.log1p(Math.max(0,km-EARTH_KM)/ORBIT_H);
+        }
+        const moonSystems = [];
+        Object.entries(moonSpecs).forEach(([planetName, specs]) => {
+          const parent = bodies.find((b) => b.n === planetName),
+            group = new THREE.Group();
+          scene.add(group);
+          const moons = [];
+          specs.forEach(([n, radius, size, color, period], index) => {
+            const moonOrbitPoints=[];
+            for(let k=0;k<=64;k++) {
+              const orbitAngle=(k/64)*TAU;
+              moonOrbitPoints.push(new THREE.Vector3(Math.cos(orbitAngle)*radius,0,Math.sin(orbitAngle)*radius));
+            }
+            group.add(new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(moonOrbitPoints),
+              new THREE.LineBasicMaterial({color:0xdce0ff,transparent:true,opacity:.08,depthWrite:false})
+            ));
+            const mesh = new THREE.Mesh(
+              new THREE.SphereGeometry(size, 20, 14),
+              new THREE.MeshStandardMaterial({ color, roughness: 0.85 }),
+            );
+            group.add(mesh);
+            const moonBody = { n, mesh, parent, isMoon: true, radius };
+            moonBody.trail = makeTrail(color);
+            mesh.userData.body = moonBody;
+            addHitZone(mesh,moonBody,Math.max(.9,size*3.4));
+            moons.push({
+              n,
+              radius,
+              period,
+              mesh,
+              body: moonBody,
+              phase: index * 1.7,
+            });
+          });
+          group.visible = false;
+          // Les grandes lunes des géantes suivent l'équateur de leur planète ; la nôtre suit l'écliptique
+          if(parent.n!=="Terre"&&parent.tilt) group.quaternion.copy(parent.tilt);
+          moonSystems.push({ parent, group, moons });
+        });
+        // Vraies textures planétaires (cartes équirectangulaires). Les textures procédurales restent le repli hors ligne.
+        const TEXTURE_BASE="https://cdn.jsdelivr.net/gh/jeromeetienne/threex.planets@master/images/",
+          textureLoader=new THREE.TextureLoader(),
+          PLANET_MAPS={ Mercure:"mercurymap.jpg", "Vénus":"venusmap.jpg", Mars:"marsmap1k.jpg",
+            Jupiter:"jupitermap.jpg", Saturne:"saturnmap.jpg", Uranus:"uranusmap.jpg", Neptune:"neptunemap.jpg" };
+        function paintSurface(mesh, url, onLoad) {
+          textureLoader.load(url, (map) => {
+            map.colorSpace=THREE.SRGBColorSpace; map.anisotropy=8; map.wrapS=THREE.RepeatWrapping;
+            mesh.material.map=map; mesh.material.needsUpdate=true;
+            if(onLoad) onLoad(map);
+          });
+        }
+        paintSurface(earth.mesh,
+          "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg",
+          () => { earth.mesh.material.roughness=.92; });
+        bodies.forEach((b) => { if(PLANET_MAPS[b.n]) paintSurface(b.mesh, TEXTURE_BASE+PLANET_MAPS[b.n]); });
+        moonSystems.forEach((system) => system.moons.forEach((moon) => {
+          if(moon.n==="Lune") paintSurface(moon.mesh, TEXTURE_BASE+"moonmap1k.jpg");
+        }));
+        paintSurface(sun, TEXTURE_BASE+"sunmap.jpg");
+        if(saturnRing) { // bande d'anneaux : couleur + transparence, la division de Cassini apparaît
+          paintSurface(saturnRing, TEXTURE_BASE+"saturnringcolor.jpg", () => {
+            saturnRing.material.color.set(0xffffff); saturnRing.material.opacity=.92;
+          });
+          textureLoader.load(TEXTURE_BASE+"saturnringpattern.gif", (alpha) => {
+            saturnRing.material.alphaMap=alpha; saturnRing.material.needsUpdate=true;
+          });
+        }
+
+        let day = (Date.now() - J2000) / 864e5,
+          playing = false,
+          showLabels = false,
+          theme = "night",
+          selected = null,
+          missionDateEndpoint = "start",
+          az = 0.65,
+          goalAz = null,
+          goalElev = null,
+          elev = 0.58,
+          dist = 230,
+          goalDist = 230,
+          target = new THREE.Vector3(),
+          targetVelocity = new THREE.Vector3(),
+          overviewTarget = new THREE.Vector3(),
+          focusTarget = new THREE.Vector3(),
+          previousFocusTarget = new THREE.Vector3(),
+          trackedFocus = null,
+          distVelocity = 0,
+          azVelocity = 0,
+          elevVelocity = 0,
+          drag = false,
+          last = { x: 0, y: 0 },
+          moved = 0,
+          panVelocityAz = 0,
+          panVelocityElev = 0,
+          lastPanTime = 0,
+          activePointers = new Map(),
+          pinching = false,
+          pinchStartDistance = 0,
+          pinchStartZoom = 230,
+          pinchStartScale = 1,
+          spacecraftZoomScale = 1;
+        // Amortissement critique : conserve la vitesse entre deux images et accepte
+        // une nouvelle destination sans cassure. Les changements de cible restent
+        // donc interrompables, mais sans oscillation ni dépassement.
+        function smoothDamp(current, destination, velocity, smoothTime, dt) {
+          const omega = 2 / Math.max(0.0001, smoothTime),
+            x = omega * dt,
+            decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x),
+            change = current - destination,
+            temp = (velocity + omega * change) * dt;
+          let nextVelocity = (velocity - omega * temp) * decay,
+            value = destination + (change + temp) * decay;
+          if ((destination - current > 0) === (value > destination)) {
+            value = destination;
+            nextVelocity = 0;
+          }
+          return { value, velocity: nextVelocity };
+        }
+        function smoothDampVector(current, destination, velocity, smoothTime, dt) {
+          const x = smoothDamp(current.x, destination.x, velocity.x, smoothTime, dt),
+            y = smoothDamp(current.y, destination.y, velocity.y, smoothTime, dt),
+            z = smoothDamp(current.z, destination.z, velocity.z, smoothTime, dt);
+          current.set(x.value, y.value, z.value);
+          velocity.set(x.velocity, y.velocity, z.velocity);
+        }
+        // Vise une orientation au lieu d'y sauter : la caméra glisse par le chemin le plus court
+        function aimCamera(targetAz, targetElev) {
+          goalAz = targetAz;
+          goalElev = targetElev;
+          panVelocityAz = 0;
+          panVelocityElev = 0;
+        }
+        function placeCamera() {
+          camera.position.set(
+            target.x + Math.sin(az) * Math.cos(elev) * dist,
+            target.y + Math.sin(elev) * dist,
+            target.z + Math.cos(az) * Math.cos(elev) * dist,
+          );
+          camera.lookAt(target);
+          compass.style.transform = `rotate(${-az}rad)`;
+        }
+        // Orbite képlérienne : ellipse inclinée, orientée par son nœud et son périhélie.
+        // Comme pour les sondes, la direction est exacte et seule la distance est comprimée.
+        function planetPosition(b, d, out) {
+          const years = d / 365.25,
+            mean = (b.L + (360 * years) / b.p - b.peri) * DEG;
+          let E = mean + b.e * Math.sin(mean);
+          for (let k = 0; k < 5; k++) // Newton sur E − e·sin E = M
+            E -= (E - b.e * Math.sin(E) - mean) / (1 - b.e * Math.cos(E));
+          const xv = b.a * (Math.cos(E) - b.e),
+            yv = b.a * Math.sqrt(1 - b.e * b.e) * Math.sin(E),
+            trueAnomaly = Math.atan2(yv, xv),
+            au = Math.hypot(xv, yv),
+            u = trueAnomaly + (b.peri - b.node) * DEG,
+            node = b.node * DEG,
+            inc = b.inc * DEG,
+            scale = sceneRadius(au) / au;
+          return out.set(
+            au * (Math.cos(node) * Math.cos(u) - Math.sin(node) * Math.sin(u) * Math.cos(inc)) * scale,
+            au * Math.sin(u) * Math.sin(inc) * scale,
+            -au * (Math.sin(node) * Math.cos(u) + Math.cos(node) * Math.sin(u) * Math.cos(inc)) * scale,
+          );
+        }
+        function formatDay() {
+          const date = new Date(J2000 + day * 864e5);
+          if (dayRange <= 5) // au pas de l'heure, c'est l'heure qui porte l'information
+            return date.toLocaleString("fr-FR", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
+          if (dayRange >= 20000) // au pas de l'année, le jour n'a plus de sens
+            return date.toLocaleDateString("fr-FR", { month:"short", year:"numeric" });
+          return date.toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" });
+        }
+        // Textes du cartouche dépliable
+        const infoText = {
+          "Mercure": "La plus petite planète et la plus rapide : 88 jours pour boucler son orbite. Sans atmosphère pour amortir quoi que ce soit, sa surface passe de −170 °C la nuit à 430 °C au soleil. BepiColombo doit s’y mettre en orbite fin 2026.",
+          "Vénus": "Presque la jumelle de la Terre par la taille, l’enfer en plus : 92 bars de gaz carbonique et 465 °C au sol, de quoi fondre le plomb. Elle tourne à l’envers, et si lentement qu’un jour vénusien dure plus longtemps que son année.",
+          "Terre": "La seule planète où l’eau liquide tient en surface, protégée par un champ magnétique et une atmosphère d’azote et d’oxygène. Son axe incliné de 23,44° donne les saisons ; la Lune stabilise cette inclinaison depuis quatre milliards d’années.",
+          "Mars": "Deux fois plus petite que la Terre, avec une atmosphère cent fois plus ténue. On y trouve le plus haut volcan du système solaire, Olympus Mons et ses 22 km, et les lits de rivières taries il y a trois milliards d’années.",
+          "Jupiter": "Deux fois et demie plus massive que toutes les autres planètes réunies. Sa Grande Tache rouge est un anticyclone suivi depuis le XVIIᵉ siècle, et son champ magnétique, le plus puissant après celui du Soleil, s’étend au-delà de l’orbite de Saturne.",
+          "Saturne": "Ses anneaux s’étalent sur 280 000 km mais ne font que quelques dizaines de mètres d’épaisseur, presque uniquement de la glace d’eau. La planète, elle, est si peu dense qu’elle flotterait sur l’eau.",
+          "Uranus": "Basculée à 98°, elle roule sur son orbite : chaque pôle reste 21 ans en plein soleil, puis 21 ans dans le noir. Une seule sonde l’a visitée, Voyager 2 en janvier 1986.",
+          "Neptune": "Découverte en 1846 par le calcul avant d’être observée. Ses vents atteignent 2 100 km/h, les plus violents du système solaire, et il lui faut 165 ans pour faire le tour du Soleil.",
+          "Lune": "À 384 400 km, elle nous montre toujours la même face et s’éloigne de 3,8 cm par an. Douze personnes y ont marché entre 1969 et 1972.",
+          "Phobos": "22 km de diamètre, un caillou qui orbite à 6 000 km de Mars — trois fois par jour martien. Elle descend de quelques centimètres par siècle et finira disloquée en anneau.",
+          "Deimos": "12 km à peine. Vue depuis Mars, elle ressemble à une étoile brillante qui met deux jours à traverser le ciel.",
+          "Io": "Le corps le plus volcanique du système solaire : plus de 400 volcans actifs, alimentés par le pétrissage de marée entre Jupiter et les autres lunes.",
+          "Europe": "Sous 15 à 25 km de glace, un océan salé qui contiendrait deux fois plus d’eau que tous ceux de la Terre. C’est la cible d’Europa Clipper et de JUICE.",
+          "Ganymède": "La plus grosse lune du système solaire, plus grande que Mercure, et la seule à posséder son propre champ magnétique.",
+          "Callisto": "La surface la plus cratérisée que l’on connaisse, inchangée depuis quatre milliards d’années. Assez loin de Jupiter pour échapper à ses ceintures de radiation.",
+          "Mimas": "Son cratère Herschel fait le tiers de son diamètre : l’impact a failli la briser.",
+          "Encelade": "Des geysers d’eau salée jaillissent de son pôle sud. Cassini les a traversés et y a trouvé des molécules organiques : un océan global se cache sous la glace.",
+          "Téthys": "Presque uniquement de la glace d’eau, entaillée par Ithaca Chasma, un canyon de 2 000 km de long.",
+          "Dioné": "Ses falaises de glace, prises pour de simples traînées brillantes par Voyager, font plusieurs centaines de mètres de haut.",
+          "Rhéa": "Deuxième lune de Saturne par la taille : un monde de glace criblé de cratères.",
+          "Titan": "La seule lune dotée d’une vraie atmosphère, plus dense que celle de la Terre. Il y pleut du méthane, qui remplit lacs et rivières. Huygens s’y est posé en 2005 ; l’hélicoptère Dragonfly doit y voler.",
+          "Japet": "Un hémisphère noir comme du charbon, l’autre blanc comme la neige, et une crête équatoriale de 13 km de haut qui en fait le tour.",
+          "Miranda": "Un patchwork de terrains qui semblent recollés, avec Verona Rupes, une falaise de 20 km : la plus haute connue.",
+          "Ariel": "La surface la plus jeune du système d’Uranus, striée de vallées de glace.",
+          "Umbriel": "La plus sombre des grandes lunes d’Uranus, marquée d’un anneau lumineux resté inexpliqué.",
+          "Titania": "La plus grande lune d’Uranus, fracturée par des canyons longs de 1 600 km.",
+          "Obéron": "La plus extérieure des grandes lunes d’Uranus, criblée de cratères aux fonds sombres.",
+          "Protée": "L’une des plus grosses lunes irrégulières connues : un peu plus de masse et sa gravité l’aurait arrondie.",
+          "Triton": "Elle tourne à contresens de Neptune : c’est un objet de la ceinture de Kuiper capturé. Des geysers d’azote y jaillissent par −235 °C.",
+          "Néréide": "Son orbite est l’une des plus excentriques connues : elle passe de 1,4 à 9,7 millions de kilomètres de Neptune.",
+          "Voyager 1": "Lancée le 5 septembre 1977, elle survole Jupiter en 1979 puis Saturne en 1980 ; l’assistance de Titan l’éjecte hors du plan des planètes. Depuis le 25 août 2012 elle navigue dans le milieu interstellaire, à plus de 170 UA : l’objet humain le plus lointain.",
+          "Voyager 2": "La seule sonde à avoir visité les quatre géantes : Jupiter en 1979, Saturne en 1981, Uranus en 1986, Neptune en 1989. Après Neptune elle plonge vers le sud et franchit l’héliopause en novembre 2018.",
+          "New Horizons": "Neuf ans et demi de voyage pour vingt-deux minutes de survol : le 14 juillet 2015 elle photographie Pluton pour la première fois, puis Arrokoth en 2019, l’objet le plus lointain jamais approché.",
+          "Parker Solar Probe": "Passée à 6,1 millions de kilomètres du Soleil, dans la couronne, à 690 000 km/h : l’objet humain le plus rapide. Son bouclier de carbone encaisse 1 400 °C pendant que les instruments restent à température ambiante.",
+          "Solar Orbiter": "Mission ESA et NASA qui incline peu à peu son orbite pour photographier les pôles du Soleil, invisibles depuis la Terre.",
+          "JUICE": "Partie en 2023 pour Jupiter, elle doit se mettre en orbite autour de Ganymède en 2034 — une première autour d’une lune autre que la nôtre.",
+          "Europa Clipper": "Lancée en 2024, elle survolera Europe une cinquantaine de fois à partir de 2030 pour sonder l’océan caché sous sa banquise.",
+          "Lucy": "Douze ans de voyage pour visiter huit astéroïdes troyens, ces corps piégés sur l’orbite de Jupiter qui sont des fossiles de la formation du système solaire.",
+          "Psyche": "Direction (16) Psyché, un astéroïde riche en métal qui pourrait être le noyau mis à nu d’une planète avortée.",
+          "Juno": "En orbite polaire autour de Jupiter depuis 2016, elle plonge tous les 43 jours sous les ceintures de radiation pour sonder l’intérieur de la planète.",
+          "BepiColombo": "Mission Europe-Japon vers Mercure : neuf survols de planètes pour freiner assez et se laisser capturer par la plus petite des orbites.",
+          "OSIRIS-APEX": "Après avoir rapporté un échantillon de l’astéroïde Bennu en 2023, la sonde a été relancée vers Apophis, qu’elle rejoindra en 2029.",
+          "Cassini": "Treize ans en orbite autour de Saturne, l’atterrisseur Huygens posé sur Titan, la découverte des geysers d’Encelade — puis une plongée volontaire dans l’atmosphère de Saturne le 15 septembre 2017 pour ne rien contaminer.",
+          "Galileo": "Première sonde en orbite autour de Jupiter, de 1995 à 2003. Elle a largué une sonde dans l’atmosphère jovienne et révélé l’océan d’Europe.",
+          "Rosetta": "Dix ans de voyage pour se mettre en orbite autour de la comète Tchouri en 2014 et y poser Philae : une première.",
+          "Dawn": "La seule sonde à s’être mise en orbite autour de deux corps différents : Vesta en 2011, puis Cérès en 2015.",
+          "Pioneer 10": "Première sonde à traverser la ceinture d'astéroïdes et à survoler Jupiter, en décembre 1973. Elle porte la plaque gravée d'un homme et d'une femme. Dernier signal reçu en janvier 2003 ; elle file toujours vers Aldébaran, qu'elle atteindrait dans deux millions d'années.",
+          "Pioneer 11": "Jumelle de Pioneer 10, elle a ouvert la route de Saturne en 1979 en passant à 21 000 km des nuages — une trajectoire d'essai pour valider le passage des Voyager. Silencieuse depuis 1995.",
+          "Ulysses": "La seule sonde à avoir survolé les pôles du Soleil. Un détour par Jupiter en 1992 a basculé son orbite à 79° du plan des planètes : elle a plongé trois fois au-dessus de chaque pôle solaire en dix-huit ans.",
+          "MESSENGER": "Six survols de planètes et six ans de voyage pour freiner assez et se mettre en orbite autour de Mercure en 2011. Elle y a trouvé de la glace d'eau au fond de cratères jamais éclairés, avant de s'y écraser en 2015.",
+          "Hayabusa2": "Elle a prélevé des échantillons de l'astéroïde Ryugu, dont de la matière sous-jacente exposée par un impacteur, et les a largués en Australie en décembre 2020. Elle poursuit sa route vers l'astéroïde 1998 KY26, prévu pour 2031.",
+          "Hera": "Mission européenne partie en 2024 inspecter Dimorphos, l'astéroïde dévié par l'impact de DART en 2022. Elle doit mesurer précisément le cratère et la masse pour transformer l'essai en méthode.",
+          "Tianwen-1": "Première mission chinoise vers Mars : orbiteur, atterrisseur et rover d'un coup, en 2021. Le rover Zhurong a roulé deux ans dans Utopia Planitia.",
+          "Mars Express": "En orbite depuis 2003, c'est la plus ancienne sonde encore active autour de Mars. Son radar a détecté ce qui pourrait être de l'eau liquide sous la calotte sud.",
+          "Akatsuki": "Ratée en 2010, sa mise en orbite autour de Vénus a été retentée cinq ans plus tard avec les petits propulseurs d'attitude — et a réussi. Elle a cartographié les vents de la super-rotation atmosphérique jusqu'en 2024.",
+          "JWST": "Au point de Lagrange L2, à 1,5 million de kilomètres de la Terre, protégé du Soleil par un pare-soleil de la taille d'un court de tennis. Il observe dans l'infrarouge les premières galaxies formées après le Big Bang.",
+          "ISS": "400 tonnes assemblées en orbite depuis 1998, habitées sans interruption depuis novembre 2000. Un tour de Terre en 92 minutes, soit seize levers de soleil par jour.",
+          "Hubble": "En orbite depuis 1990, réparé cinq fois par des équipages de navette. Il observe de l’ultraviolet à l’infrarouge proche, au-dessus de l’atmosphère qui brouille tout.",
+          "Tiangong": "La station chinoise, achevée en 2022 : trois modules et trois taïkonautes en permanence.",
+          "GPS": "Une trentaine de satellites à 20 200 km répartis sur six plans : où que vous soyez, au moins quatre sont visibles à la fois, ce qui suffit à calculer une position et l’heure.",
+          "Starlink": "Plusieurs milliers de satellites autour de 550 km d’altitude, la plus grande constellation jamais déployée. Quelques centaines seulement sont affichés ici.",
+          "Prochaine mission orbitale": "Cap Canaveral tire vers l’est au-dessus de l’Atlantique pour profiter de la rotation terrestre, qui offre environ 400 m/s. La fenêtre affichée est illustrative : elle ne vient pas d’un manifeste de lancement réel.",
+          "Mission d’observation": "Kourou se trouve à 5° de l’équateur, le site occidental le mieux placé pour les orbites géostationnaires. La fenêtre affichée est illustrative.",
+          "Mission lunaire": "Tanegashima tire au-dessus du Pacifique depuis une île du sud du Japon. La fenêtre affichée est illustrative.",
+        };
+        function setSelected(b) {
+          const selectionChanged=selected!==b;
+          selected = b || null;
+          if(selectionChanged) { missionDateEndpoint="start"; spacecraftZoomScale=1; }
+          back.style.display = selected ? "grid" : "none";
+          // le cartouche reste toujours là : sans sélection il annonce « Système solaire »
+          iname.textContent = selected ? selected.n : "Système solaire";
+          sub.textContent = selected
+            ? selected.isMoon
+              ? "Lune de " + selected.parent.n
+              : selected.isSatellite
+                ? satelliteMeta(selected)
+              : selected.isSpacecraft
+                ? selected.valid
+                : selected.a.toFixed(2).replace(".", ",") + " UA du Soleil"
+            : "Explorer les orbites";
+          setDetail(selected?selected.n:null);
+          if(selectionChanged) collapseDetail();
+          selectionInfo.classList.toggle("spacecraft-info",!!selected?.isSpacecraft);
+          if (selected) goalDist = selected.isMoon ? 14 : selected.isSatellite ? (selected.frameDist||5) : selected.isSpacecraft ? 34 : 42;
+          if (selected?.isSpacecraft) closeBrowser();
+          renderMissionList();
+        }
+        const MONTHS={janvier:0,"février":1,mars:2,avril:3,mai:4,juin:5,juillet:6,"août":7,septembre:8,octobre:9,novembre:10,"décembre":11},
+          MONTH_NAMES=Object.keys(MONTHS).join("|"),
+          DATE_PATTERN=new RegExp(
+            "(\\d{1,2})(?:er)?\\s+("+MONTH_NAMES+")\\s+((?:19|20)\\d{2})"
+            +"|("+MONTH_NAMES+")\\s+((?:19|20)\\d{2})"
+            +"|\\b((?:19|20)\\d{2})\\b","g");
+        function dayFromUTC(year,month,date) { return (Date.UTC(year,month,date)-J2000)/864e5; }
+        // Chaque date du texte devient un bouton qui cale la timeline dessus
+        function linkifyDates(text) {
+          return text.replace(DATE_PATTERN,(match,d,m1,y1,m2,y2,y3) => {
+            const day=y1!==undefined?dayFromUTC(+y1,MONTHS[m1],+d)
+              :y2!==undefined?dayFromUTC(+y2,MONTHS[m2],15)
+              :dayFromUTC(+y3,6,1);
+            return '<button type="button" class="date-link" data-day="'+day.toFixed(2)+'">'+match+"</button>";
+          });
+        }
+        function setDetail(name, override) {
+          const text=override||(name&&infoText[name])||"";
+          detail.innerHTML=linkifyDates(text);
+          selectionInfo.classList.toggle("has-detail",!!text);
+        }
+        detail.onclick=(e) => {
+          const link=e.target.closest(".date-link");
+          if(!link) return;
+          e.stopPropagation();
+          const target=parseFloat(link.dataset.day);
+          animateDateTo(target,HANDLE_REST,restCenter(target));
+        };
+        function closeBrowser() { // on laisse la scène respirer, l'onglet reste mémorisé
+          browser.classList.add("closed");
+          viewTrigger.classList.remove("open");
+        }
+        const SHEET_MIN_HEIGHT=58;
+        let sheetProgress=0, sheetProgressTarget=0, sheetDragging=false,
+          sheetStartY=0, sheetStartHeight=SHEET_MIN_HEIGHT,
+          sheetLastY=0, sheetLastTime=0, sheetVelocity=0, sheetWasDragged=false;
+        function sheetMaxHeight() {
+          return Math.max(SHEET_MIN_HEIGHT, innerHeight * .5);
+        }
+        function setSheetHeight(height) {
+          const max=sheetMaxHeight(), clamped=Math.max(SHEET_MIN_HEIGHT,Math.min(max,height));
+          sheetProgress=(clamped-SHEET_MIN_HEIGHT)/(max-SHEET_MIN_HEIGHT||1);
+          sheetProgressTarget=sheetProgress;
+          selectionInfo.style.height=clamped+"px";
+          paintSheetProgress(sheetProgress);
+        }
+        function paintSheetProgress(progress) {
+          selectionInfo.style.setProperty("--sheet-progress",progress.toFixed(3));
+          selectionInfo.style.setProperty("--sheet-offset",((1-progress)*8).toFixed(2)+"px");
+        }
+        function snapSheet(open, animate=true) {
+          open=!!open&&selectionInfo.classList.contains("has-detail");
+          sheetDragging=false;
+          selectionInfo.classList.remove("dragging");
+          if(!animate) selectionInfo.classList.add("dragging");
+          selectionInfo.classList.toggle("expanded",open);
+          detailToggle.setAttribute("aria-expanded",String(open));
+          sheetGrabber.setAttribute("aria-expanded",String(open));
+          sheetGrabber.setAttribute("aria-label",open?"Réduire le détail":"Agrandir le détail");
+          sheetProgressTarget=open?1:0;
+          selectionInfo.style.height=(open?sheetMaxHeight():SHEET_MIN_HEIGHT)+"px";
+          if(!animate) {
+            sheetProgress=sheetProgressTarget;
+            paintSheetProgress(sheetProgress);
+            requestAnimationFrame(()=>selectionInfo.classList.remove("dragging"));
+          }
+        }
+        function beginSheetDrag(e) {
+          if(!selectionInfo.classList.contains("has-detail")||e.button>0) return;
+          e.stopPropagation();
+          sheetDragging=true; sheetWasDragged=false;
+          selectionInfo.classList.add("dragging");
+          sheetStartY=sheetLastY=e.clientY;
+          sheetStartHeight=selectionInfo.getBoundingClientRect().height;
+          sheetLastTime=performance.now(); sheetVelocity=0;
+          selectionInfo.setPointerCapture(e.pointerId);
+        }
+        function moveSheet(e) {
+          if(!sheetDragging||!selectionInfo.hasPointerCapture(e.pointerId)) return;
+          e.preventDefault(); e.stopPropagation();
+          const now=performance.now(), dy=e.clientY-sheetLastY,
+            elapsed=Math.max(8,now-sheetLastTime);
+          sheetVelocity=sheetVelocity*.35+(dy/elapsed)*.65;
+          sheetLastY=e.clientY; sheetLastTime=now;
+          if(Math.abs(e.clientY-sheetStartY)>3) sheetWasDragged=true;
+          setSheetHeight(sheetStartHeight+sheetStartY-e.clientY);
+        }
+        function endSheetDrag(e) {
+          if(!sheetDragging) return;
+          e.stopPropagation();
+          if(selectionInfo.hasPointerCapture(e.pointerId)) selectionInfo.releasePointerCapture(e.pointerId);
+          const open=Math.abs(sheetVelocity)>.28?sheetVelocity<0:sheetProgress>.42;
+          snapSheet(open);
+        }
+        [infoHeader,sheetGrabber].forEach(surface=>surface.addEventListener("pointerdown",beginSheetDrag));
+        selectionInfo.addEventListener("pointermove",moveSheet,{passive:false});
+        selectionInfo.addEventListener("pointerup",endSheetDrag);
+        selectionInfo.addEventListener("pointercancel",endSheetDrag);
+        sheetGrabber.onclick=(e)=>{
+          e.stopPropagation();
+          if(sheetWasDragged) { sheetWasDragged=false; return; }
+          snapSheet(!selectionInfo.classList.contains("expanded"));
+        };
+        function collapseDetail() {
+          snapSheet(false);
+        }
+        detailToggle.addEventListener("pointerdown",e=>e.stopPropagation());
+        detailToggle.onclick=(e)=>{
+          e.stopPropagation();
+          snapSheet(!selectionInfo.classList.contains("expanded"));
+        };
+        selectionInfo.onclick=()=>{
+          if(sheetWasDragged) { sheetWasDragged=false; return; }
+          if(!selected?.isSpacecraft) return;
+          stopTimelineInertia();
+          const years=missionYears(selected);
+          if(missionDateEndpoint==="start") {
+            const targetDay=dayForYear(years.start);
+            animateDateTo(targetDay,0,targetDay+dayRange/2); missionDateEndpoint="end";
+          } else {
+            const targetDay=dayForYear(years.end+1)-1;
+            animateDateTo(targetDay,100,targetDay-dayRange/2); missionDateEndpoint="start";
+          }
+        };
+        function reset() {
+          selectedLaunch=null; launchArc.visible=false; launchHead.visible=false;
+          selected = null;
+          aimCamera(0.65, 0.58); // retour à la vue d'ensemble, en glissant
+          goalDist = 230;
+          setSelected(null);
+        }
+        function renderLabels() {
+          bodies.forEach((b) => {
+            if (!showLabels) {
+              b.label.style.display = "none";
+              return;
+            }
+            const v = b.mesh.position.clone().project(camera);
+            const ok = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+            b.label.style.display = ok ? "block" : "none";
+            if (ok) {
+              b.label.style.left = (v.x * 0.5 + 0.5) * innerWidth + "px";
+              b.label.style.top = (-v.y * 0.5 + 0.5) * innerHeight + "px";
+            }
+          });
+          spacecraft.forEach((m) => {
+            if (!m.mesh.visible || !(showLabels || selected===m)) { m.label.style.display="none"; return; }
+            const v=m.mesh.position.clone().project(camera), ok=v.z<1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1;
+            m.label.style.display=ok?"block":"none";
+            if(ok){m.label.style.left=(v.x*.5+.5)*innerWidth+"px";m.label.style.top=(-v.y*.5+.5)*innerHeight+"px";}
+          });
+          satellites.forEach((s) => {
+            if (!s.label) return;
+            if (selected!==s||!s.mesh.visible) { s.label.style.display="none"; return; }
+            const v=s.mesh.position.clone().project(camera), ok=v.z<1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1;
+            s.label.style.display=ok?"block":"none";
+            if(ok){s.label.style.left=(v.x*.5+.5)*innerWidth+"px";s.label.style.top=(-v.y*.5+.5)*innerHeight+"px";}
+          });
+        }
+        const TRAIL_SAMPLES=512, trailBox=new THREE.Box3(), scratchSize=new THREE.Vector3(),
+          scratchFocusDelta=new THREE.Vector3(),
+          spinAxis=new THREE.Quaternion();
+        let t0 = performance.now(),
+          previousDay = day,
+          timeVelocity = 0,
+          trailEnergy = 0,
+          trailDirection = 1;
+        function frame(t) {
+          const dt = Math.min(0.05, (t - t0) / 1000);
+          t0 = t;
+          if(!sheetDragging) {
+            sheetProgress+=(sheetProgressTarget-sheetProgress)*(1-Math.exp(-12*dt));
+            if(Math.abs(sheetProgressTarget-sheetProgress)<.001) sheetProgress=sheetProgressTarget;
+            paintSheetProgress(sheetProgress);
+          }
+          if(selected&&sheetProgress>.001)
+            camera.setViewOffset(innerWidth,innerHeight,0,innerHeight*.25*sheetProgress,innerWidth,innerHeight);
+          else camera.clearViewOffset();
+          if (!drag) {
+            az += panVelocityAz * dt;
+            elev = Math.max(
+              0.12,
+              Math.min(1.35, elev + panVelocityElev * dt),
+            );
+            const momentumDecay = Math.exp(-3.4 * dt);
+            panVelocityAz *= momentumDecay;
+            panVelocityElev *= momentumDecay;
+            if (elev <= 0.12 || elev >= 1.35) panVelocityElev = 0;
+          }
+          if (playing) day += 1.6 * dt;
+          const rawVelocity = (day - previousDay) / Math.max(dt, 0.001);
+          previousDay = day;
+          if (Math.abs(rawVelocity) > 0.02)
+            trailDirection = Math.sign(rawVelocity);
+          timeVelocity +=
+            (Math.abs(rawVelocity) - timeVelocity) *
+            (1 - Math.exp(-10 * dt));
+          trailEnergy = Math.max(timeVelocity, trailEnergy * Math.exp(-2.2 * dt));
+          const trailStrength = Math.min(1, trailEnergy / 180);
+          bodies.forEach((b) => {
+            planetPosition(b, day, b.mesh.position);
+            if (b.spin) // axe incliné + rotation à la vraie période (la Terre est recalée plus bas sur le temps sidéral)
+              b.mesh.quaternion.copy(b.tilt).multiply(spinAxis.setFromAxisAngle(UP, (TAU * day) / b.spin));
+            const span = Math.min(b.p * 365.25 * 0.09, 2 + trailEnergy * 0.13),
+              points = [];
+            for (let k = 0; k < 72; k++) {
+              const u = k / 71;
+              points.push(planetPosition(b, day - trailDirection * span * u, new THREE.Vector3()));
+            }
+            updateTrail(b.trail, points, trailStrength * 0.72);
+          });
+          spacecraft.forEach((m) => {
+            m.mesh.visible=(selected===m||showAllSpacecraft)&&missionIsValid(m,day);
+            missionPosition(m,day,m.mesh.position); m.mesh.rotation.y+=dt*.8;
+            // taille écran constante : lisible en vue système comme collée à une planète
+            m.mesh.scale.setScalar(THREE.MathUtils.clamp(dist*.0059,.06,3)*(selected===m?1.35:1));
+            if(selected!==m||!m.mesh.visible) { m.trail.visible=false; m.trailRadius=0; return; } // pas de calcul inutile
+            const years=missionYears(m), endDay=Math.min(day,dayForYear(years.end+1)), points=[];
+            // Une sonde en orbite ne montre que sa dernière révolution : sinon la traînée se replie sur elle-même
+            const cycle=m.orbit?m.orbit[3]*365.25:m.local?1/m.local[1]:0,
+              startDay=Math.max(dayForYear(years.start), cycle?endDay-cycle*1.15:-1e9);
+            if(endDay>=startDay) for(let k=0;k<TRAIL_SAMPLES;k++) {
+              const sampleDay=startDay+(endDay-startDay)*(k/(TRAIL_SAMPLES-1));
+              points.push(missionPosition(m,sampleDay,new THREE.Vector3()));
+            }
+            updateTrail(m.trail,points,0.88);
+            if(points.length) { // cadre de la trajectoire, pour que la caméra sache quoi montrer
+              trailBox.setFromPoints(points);
+              m.trailCenter=trailBox.getCenter(m.trailCenter||new THREE.Vector3());
+              m.trailRadius=Math.max(trailBox.getSize(scratchSize).length()/2, 1.2);
+            }
+          });
+          // Le globe suit le temps sidéral : le repère inertiel des TLE tombe juste
+          const currentDate=new Date(J2000+propagationDay()*864e5);
+          earth.mesh.quaternion.copy(earthTilt)
+            .multiply(new THREE.Quaternion().setFromAxisAngle(UP,gmst(day)));
+          const panelOpen=!satellitePanel.classList.contains("closed"), satellitesShown=showEverySatellite,
+            satelliteScale=THREE.MathUtils.clamp(dist*.08,.14,1.6);
+          satelliteOrbits.position.copy(earth.mesh.position);
+          const nowMs=performance.now();
+          const tleValid=tleUsable(), currentYear=decimalYear(day);
+          let bornSignature="";
+          satellites.forEach(s=>{ bornSignature+=s.group?"g"+s.aliveCount:((!s.launch||currentYear>=s.launch)?"1":"0"); });
+          if(panelOpen&&tleEpochDay!==null&&(!tleValid!==noteOutOfRange||bornSignature!==lastBornSignature)) {
+            noteOutOfRange=!tleValid; lastBornSignature=bornSignature;
+            updateSatelliteNote(); renderSatelliteList();
+            if(selected?.isSatellite) sub.textContent=satelliteMeta(selected);
+          }
+          satellites.forEach((s) => {
+            const born=!s.launch||currentYear>=s.launch;
+            const shown=(selected===s||satellitesShown)&&!!s.satrec&&born;
+            s.mesh.visible=shown;
+            if(s.orbit) s.orbit.visible=shown&&!s.group;
+            if(!shown) { s.mesh.position.copy(earth.mesh.position); return; } // pas de position fantôme
+            if(s.group) { // constellation : nuage de points recalculé quand la date bouge
+              s.mesh.position.copy(earth.mesh.position);
+              s.mesh.material.size=THREE.MathUtils.clamp(dist*.014,.02,.35);
+              s.mesh.material.opacity=tleValid?1:.45;
+              if(s.constellationDay!==day&&nowMs-(s.lastConstellationUpdate||0)>70) {
+                updateConstellation(s,currentDate,currentYear,day); s.lastConstellationUpdate=nowMs;
+              }
+              s.mesh.visible=s.aliveCount>0;
+              return;
+            }
+            if(!satellitePosition(s,currentDate,eciScratch)) { s.mesh.visible=false; s.orbit.visible=false; return; }
+            s.mesh.position.copy(earth.mesh.position).add(eciScratch);
+            s.mesh.lookAt(earth.mesh.position); // panneaux face à la Terre
+            s.mesh.scale.setScalar(satelliteScale); // taille écran constante : la position reste à l'échelle vraie
+            s.dim(!tleValid); // hors domaine SGP4 : silhouette estompée
+            if(s.ringDay===undefined||Math.abs(day-s.ringDay)>.5) buildSatelliteOrbit(s,currentDate);
+          });
+          moonSystems.forEach((system) => {
+            system.group.position.copy(system.parent.mesh.position);
+            system.group.visible =
+              selected === system.parent || selected?.parent === system.parent;
+            system.moons.forEach((moon) => {
+              const a = moonAngle(moon, day);
+              moon.mesh.position.set(
+                Math.cos(a) * moon.radius,
+                Math.sin(a * 0.7) * 0.18,
+                Math.sin(a) * moon.radius,
+              );
+              const span = Math.min(Math.abs(moon.period) * 0.85, 2 + trailEnergy * 0.1),
+                points = [];
+              for (let k = 0; k < 72; k++) {
+                const u = k / 71,
+                  trailDay = day - trailDirection * span * u,
+                  pastAngle = moonAngle(moon, trailDay),
+                  parent = planetPosition(system.parent, trailDay, new THREE.Vector3()),
+                  offset = new THREE.Vector3(
+                    Math.cos(pastAngle) * moon.radius,
+                    Math.sin(pastAngle * 0.7) * 0.18,
+                    Math.sin(pastAngle) * moon.radius,
+                  );
+                if(system.group.quaternion) offset.applyQuaternion(system.group.quaternion);
+                points.push(parent.add(offset));
+              }
+              updateTrail(
+                moon.body.trail,
+                points,
+                system.group.visible ? trailStrength * 0.85 : 0,
+              );
+            });
+          });
+          if (selectedLaunch && launchCurve) { // une seule ascension, puis la trajectoire reste affichée
+            launchClock += dt;
+            goalDist = launchClock < LAUNCH_DIVE ? 10 : 1.5; // recul puis plongée
+            const rise = 3.4, progress = Math.min(1, Math.max(0, launchClock) / rise);
+            if (progress < 1 || launchSettled !== 1) {
+              paintLaunchProgress(arcGlow, .34, 1.4, progress);
+              paintLaunchProgress(arcCore, 1, 1.1, progress);
+              launchSettled = progress;
+            }
+            launchHead.visible = progress > 0.004;
+            if (launchHead.visible) { // getPointAt : le tube est paramétré en longueur d'arc
+              launchCurve.getPointAt(progress, launchHead.position);
+              launchHead.scale.setScalar(THREE.MathUtils.clamp(dist * .28, .35, 2));
+            }
+          }
+          const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0021); // battement lent du point de géolocalisation
+          homeHalo.scale.setScalar(1 + pulse * 0.6);
+          homeHalo.material.opacity = 0.62 - pulse * 0.34;
+          homeDot.scale.setScalar(1 + pulse * 0.14);
+          if (goalAz !== null) {
+            const delta = Math.atan2(Math.sin(goalAz - az), Math.cos(goalAz - az)),
+              motion = smoothDamp(az, az + delta, azVelocity, 0.48, dt);
+            az = motion.value;
+            azVelocity = motion.velocity;
+            if (Math.abs(delta) < 0.0008 && Math.abs(azVelocity) < 0.002) {
+              az = goalAz; goalAz = null; azVelocity = 0;
+            }
+          }
+          if (goalElev !== null) {
+            const delta = goalElev - elev,
+              motion = smoothDamp(elev, goalElev, elevVelocity, 0.48, dt);
+            elev = motion.value;
+            elevVelocity = motion.velocity;
+            if (Math.abs(delta) < 0.0008 && Math.abs(elevVelocity) < 0.002) {
+              elev = goalElev; goalElev = null; elevVelocity = 0;
+            }
+          }
+          let focusIdentity = null;
+          if (selected?.isSpacecraft && selected.mesh.visible && selected.trailRadius) {
+            focusTarget.copy(selected.trailCenter); // on cadre la trajectoire parcourue
+            focusIdentity = selected;
+            const halfFov=THREE.MathUtils.degToRad(camera.fov/2),
+              verticalDistance=selected.trailRadius/Math.tan(halfFov),
+              horizontalDistance=verticalDistance/Math.max(.55,camera.aspect);
+            goalDist=Math.min(560,Math.max(3,Math.max(verticalDistance,horizontalDistance)*1.25*spacecraftZoomScale));
+          } else if (selected?.isSpacecraft) { focusTarget.copy(overviewTarget); goalDist=230; }
+          else if (selectedLaunch && launchCurve) { // globe entier pendant le recul, puis l'ascension
+            if (launchClock < LAUNCH_DIVE) focusTarget.copy(earth.mesh.position);
+            else earth.mesh.localToWorld(launchCurve.getPointAt(.45, focusTarget));
+            focusIdentity = selectedLaunch;
+          }
+          else if (selected) {
+            if (selected.isMoon) selected.mesh.getWorldPosition(focusTarget);
+            else focusTarget.copy(selected.mesh.position);
+            focusIdentity = selected;
+          } else focusTarget.copy(overviewTarget);
+          // Quand le temps change, on transporte le rig du même déplacement que
+          // l'objet suivi. L'astre reste stable dans le cadre au lieu d'être chassé
+          // par une caméra en retard, même lors d'un grand saut ou d'un demi-tour.
+          if (focusIdentity && focusIdentity === trackedFocus) {
+            scratchFocusDelta.subVectors(focusTarget, previousFocusTarget);
+            target.add(scratchFocusDelta);
+          } else if (focusIdentity !== trackedFocus) {
+            targetVelocity.set(0, 0, 0);
+          }
+          previousFocusTarget.copy(focusTarget);
+          trackedFocus = focusIdentity;
+          smoothDampVector(target, focusTarget, targetVelocity, focusIdentity ? 0.42 : 0.58, dt);
+          const zoomMotion = smoothDamp(dist, goalDist, distVelocity, 0.5, dt);
+          dist = zoomMotion.value;
+          distVelocity = zoomMotion.velocity;
+          placeCamera();
+          renderLabels();
+          handle.textContent = formatDay();
+          const showToday =
+            !dateTransitionFrame && Math.abs(day - (Date.now() - J2000) / 864e5) > 30;
+          todayReturn.style.display = showToday ? "block" : "none";
+          if (showToday) { // la pastille de date a la priorité : le bouton s'efface quand elle arrive à sa hauteur
+            const box = handle.getBoundingClientRect(),
+              gap = Math.abs(box.top + box.height / 2 - innerHeight / 2),
+              limit = (box.height + todayReturn.offsetHeight) / 2 + 8;
+            const hidden = todayDodged ? gap < limit + 24 : gap < limit; // hystérésis
+            if (hidden !== todayDodged) {
+              todayDodged = hidden;
+              todayReturn.style.opacity = hidden ? "0" : "1";
+              todayReturn.style.pointerEvents = hidden ? "none" : "auto";
+            }
+          }
+          renderer.render(scene, camera);
+          requestAnimationFrame(frame);
+        }
+        function pointer(e) {
+          const r = renderer.domElement.getBoundingClientRect();
+          mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+          mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+        }
+        renderer.domElement.addEventListener("pointerdown", (e) => {
+          activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+          renderer.domElement.setPointerCapture(e.pointerId);
+          if(activePointers.size===2) {
+            const points=[...activePointers.values()];
+            pinchStartDistance=Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y);
+            pinchStartZoom=goalDist; pinchStartScale=spacecraftZoomScale; pinching=true; drag=false; moved=99;
+            panVelocityAz=0; panVelocityElev=0;
+            return;
+          }
+          closeMenus();
+          goalAz = null; goalElev = null; // le doigt reprend la main sur la visée
+          azVelocity = 0; elevVelocity = 0;
+          drag = true;
+          last = { x: e.clientX, y: e.clientY };
+          lastPanTime = performance.now();
+          panVelocityAz = 0;
+          panVelocityElev = 0;
+          moved = 0;
+        });
+        renderer.domElement.addEventListener("pointermove", (e) => {
+          if(activePointers.has(e.pointerId)) activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+          if(pinching&&activePointers.size>=2) {
+            const points=[...activePointers.values()], currentDistance=Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y);
+            if(currentDistance>4) {
+              const ratio=pinchStartDistance/currentDistance;
+              if(selected?.isSpacecraft) spacecraftZoomScale=Math.max(.3,Math.min(3,pinchStartScale*ratio));
+              else goalDist=Math.max(1.4,Math.min(560,pinchStartZoom*ratio));
+            }
+            return;
+          }
+          if (!drag) return;
+          const dx = e.clientX - last.x,
+            dy = e.clientY - last.y;
+          const now = performance.now(),
+            moveDt = Math.max(0.008, (now - lastPanTime) / 1000),
+            nextVelocityAz = (-dx * 0.007) / moveDt,
+            nextVelocityElev = (dy * 0.005) / moveDt;
+          last = { x: e.clientX, y: e.clientY };
+          lastPanTime = now;
+          moved += Math.abs(dx) + Math.abs(dy);
+          az -= dx * 0.007;
+          elev = Math.max(0.12, Math.min(1.35, elev + dy * 0.005));
+          panVelocityAz = Math.max(
+            -3.5,
+            Math.min(3.5, panVelocityAz * 0.35 + nextVelocityAz * 0.65),
+          );
+          panVelocityElev = Math.max(
+            -2.4,
+            Math.min(
+              2.4,
+              panVelocityElev * 0.35 + nextVelocityElev * 0.65,
+            ),
+          );
+        });
+        renderer.domElement.addEventListener("pointerup", (e) => {
+          // Un glissement commencé sur la timeline peut se terminer au-dessus du
+          // canvas. Il ne doit jamais devenir un faux clic qui annule le suivi.
+          if (!activePointers.has(e.pointerId)) return;
+          const wasPinching=pinching;
+          activePointers.delete(e.pointerId);
+          if(wasPinching) {
+            if(activePointers.size<2) pinching=false;
+            if(activePointers.size===1) {
+              const remaining=[...activePointers.values()][0];
+              drag=true; last={x:remaining.x,y:remaining.y}; lastPanTime=performance.now(); moved=99;
+            } else drag=false;
+            return;
+          }
+          drag = activePointers.size>0;
+          if (!drag&&moved < 8) {
+            pointer(e);
+            ray.setFromCamera(mouse, camera);
+            const visibleInScene = (object) => { // trois.js ne filtre pas les objets cachés
+              for(let node=object; node; node=node.parent) if(node.visible===false) return false;
+              return true;
+            };
+            const hits = ray.intersectObjects(selectable, false).filter(h => visibleInScene(h.object));
+            hits.sort((a,b) => {
+              const priority=(hit) => hit.object.userData.body?.isMoon ? 0 : hit.object.userData.body?.isSpacecraft ? 1 : 2;
+              return priority(a)-priority(b) || a.distance-b.distance;
+            });
+            const hit = hits[0];
+            if (hit) {
+              const hitBody=hit.object.userData.body;
+              if(hitBody!==selected) setSelected(hitBody);
+            } else if(selected) reset();
+          }
+        });
+        renderer.domElement.addEventListener("pointercancel", (e) => {
+          activePointers.delete(e.pointerId); pinching=false; drag=false;
+        });
+        renderer.domElement.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            goalDist = Math.max(
+              1.4,
+              Math.min(560, goalDist * (e.deltaY > 0 ? 1.14 : 0.88)),
+            );
+          },
+          { passive: false },
+        );
+        document.getElementById("zin").onclick = () =>
+          (goalDist = Math.max(1.4, goalDist * 0.72));
+        document.getElementById("zout").onclick = () =>
+          (goalDist = Math.min(560, goalDist * 1.35));
+        document.getElementById("reset").onclick = reset;
+        back.onclick = reset;
+        document.getElementById("now").onclick = () => {
+          const targetDay=(Date.now()-J2000)/864e5;
+          animateDateTo(targetDay,HANDLE_REST,restCenter(targetDay));
+        };
+        document.getElementById("toggleLabels").onclick = () =>
+          (showLabels = !showLabels);
+        document.getElementById("play").onclick = function () {
+          playing = !playing;
+          this.textContent = playing ? "Ⅱ" : "▶";
+        };
+        document.getElementById("theme").onclick = function () {
+          theme = theme === "night" ? "day" : "night";
+          app.className = theme === "day" ? "day" : "";
+          this.textContent = theme === "day" ? "◐" : "☼";
+        };
+        const timeline = document.getElementById("timeline"),
+          todayReturn = document.getElementById("todayReturn"),
+          todayDay = (Date.now() - J2000) / 864e5;
+        let dayRange = 100, // la course du curseur vaut 100 pas de l'unité choisie
+          timelineCenter = todayDay,
+          edgeTimer = null,
+          edgeDirection = 0,
+          dragStartY = 0,
+          dragStartP = 0.5,
+          timelineVelocity = 0,
+          lastSlideDay = day,
+          lastSlideTime = 0,
+          inertiaFrame = null,
+          dateTransitionFrame = null;
+        function stopDateTransition() {
+          if(dateTransitionFrame) cancelAnimationFrame(dateTransitionFrame);
+          dateTransitionFrame=null;
+        }
+        const HANDLE_REST=62; // le curseur se pose sous le bouton « Aujourd'hui », qui garde le milieu
+        function restCenter(targetDay) { return targetDay-(HANDLE_REST/100-0.5)*dayRange; }
+        function animateDateTo(targetDay,targetTop,targetCenter) {
+          stopTimelineInertia(); stopDateTransition(); stopEdge();
+          const startDay=day, startCenter=timelineCenter,
+            startTop=parseFloat(handle.style.top||"50"), startTime=performance.now(), duration=950;
+          function transition(now) {
+            const p=Math.min(1,(now-startTime)/duration), eased=p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+            day=startDay+(targetDay-startDay)*eased;
+            timelineCenter=startCenter+(targetCenter-startCenter)*eased;
+            handle.style.top=(startTop+(targetTop-startTop)*eased)+"%";
+            if(p<1) dateTransitionFrame=requestAnimationFrame(transition);
+            else dateTransitionFrame=null;
+          }
+          dateTransitionFrame=requestAnimationFrame(transition);
+        }
+        function stopTimelineInertia() {
+          if(inertiaFrame) cancelAnimationFrame(inertiaFrame);
+          inertiaFrame=null; timelineVelocity=0;
+        }
+        function startTimelineInertia() {
+          if(Math.abs(timelineVelocity)<0.003) return;
+          let lastTime=performance.now();
+          function coast(now) {
+            const elapsed=Math.min(32,now-lastTime); lastTime=now;
+            day+=timelineVelocity*elapsed; timelineCenter+=timelineVelocity*elapsed;
+            timelineVelocity*=Math.exp(-0.0045*elapsed);
+            if(Math.abs(timelineVelocity)>0.001) inertiaFrame=requestAnimationFrame(coast);
+            else stopTimelineInertia();
+          }
+          inertiaFrame=requestAnimationFrame(coast);
+        }
+        function stopEdge() {
+          if (edgeTimer) clearInterval(edgeTimer);
+          edgeTimer = null;
+          edgeDirection = 0;
+        }
+        function startEdge(direction) {
+          if (direction === edgeDirection) return;
+          stopEdge();
+          edgeDirection = direction;
+          if (direction)
+            edgeTimer = setInterval(() => {
+              const step = direction * dayRange / 200; // même vitesse relative quelle que soit l'échelle
+              day += step;
+              timelineCenter += step;
+            }, 45);
+        }
+        function slideDate(e) {
+          const r = timeline.getBoundingClientRect(),
+            p = Math.max(
+              0,
+              Math.min(1, dragStartP + (e.clientY - dragStartY) / r.height),
+            );
+          const nextDay = timelineCenter + (p - 0.5) * dayRange,
+            now = performance.now(), elapsed = Math.max(1,now-lastSlideTime),
+            instantVelocity = (nextDay-lastSlideDay)/elapsed;
+          const maxVelocity=dayRange/4000; // l'élan reste proportionnel au pas choisi
+          timelineVelocity=Math.max(-maxVelocity,Math.min(maxVelocity,timelineVelocity*.55+instantVelocity*.45));
+          day = nextDay; lastSlideDay=day; lastSlideTime=now;
+          handle.style.top = p * 100 + "%";
+          startEdge(p < 0.025 ? -1 : p > 0.975 ? 1 : 0);
+        }
+        timeline.addEventListener("pointerdown", (e) => {
+          if (e.target !== handle) return;
+          stopDateTransition();
+          stopTimelineInertia();
+          handle.classList.add("dragging");
+          dragStartY = e.clientY;
+          dragStartP = parseFloat(handle.style.top || "50") / 100;
+          lastSlideDay=day; lastSlideTime=performance.now();
+          timeline.setPointerCapture(e.pointerId);
+        });
+        timeline.addEventListener("pointermove", (e) => {
+          if (timeline.hasPointerCapture(e.pointerId)) slideDate(e);
+        });
+        timeline.addEventListener("pointerup", (e) => {
+          handle.classList.remove("dragging");
+          stopEdge();
+          if (timeline.hasPointerCapture(e.pointerId))
+            timeline.releasePointerCapture(e.pointerId);
+          startTimelineInertia();
+        });
+        timeline.addEventListener("pointercancel", () => { handle.classList.remove("dragging"); stopEdge(); stopTimelineInertia(); });
+        const scaleMenu = document.getElementById("scaleMenu"),
+          scaleTrigger = document.getElementById("scaleTrigger"),
+          VIEW_GLYPH = { none:"◎", missions:"✦", satellites:"▣", launches:"↑" };
+        function openMenu(menu, trigger, open) {
+          menu.classList.toggle("closed", !open);
+          trigger.classList.toggle("open", open);
+        }
+        function closeMenus() { openMenu(scaleMenu, scaleTrigger, false); }
+        viewTrigger.onclick = (e) => {
+          e.stopPropagation();
+          closeMenus();
+          setExploreView(browser.classList.contains("closed") ? lastView : "none");
+        };
+        scaleTrigger.onclick = (e) => {
+          e.stopPropagation();
+          const open = scaleMenu.classList.contains("closed");
+          closeMenus(); openMenu(scaleMenu, scaleTrigger, open);
+        };
+        [...scaleMenu.children].forEach((button) => {
+          button.onclick = () => { // on garde la date courante et on recentre la course dessus
+            stopDateTransition(); stopTimelineInertia(); stopEdge();
+            dayRange = Number(button.dataset.range);
+            timelineCenter = restCenter(day);
+            handle.style.top = HANDLE_REST + "%";
+            [...scaleMenu.children].forEach(b => b.classList.toggle("active", b === button));
+            scaleTrigger.textContent = button.dataset.short;
+            closeMenus();
+          };
+        });
+        todayReturn.addEventListener("pointerdown", (e) => e.stopPropagation());
+        todayReturn.addEventListener("click", () => {
+          const targetDay=(Date.now()-J2000)/864e5;
+          animateDateTo(targetDay,HANDLE_REST,restCenter(targetDay));
+          todayReturn.style.display = "none";
+        });
+        addEventListener("resize", () => {
+          camera.aspect = innerWidth / innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(innerWidth, innerHeight);
+          selectionInfo.style.height=(sheetProgressTarget?sheetMaxHeight():SHEET_MIN_HEIGHT)+"px";
+        });
+        snapSheet(false,false);
+        placeCamera();
+        loadSatelliteElements(); // après l'initialisation de `day`
+        loadLaunches();
+        renderSatelliteList(); renderLaunchList(); setInterval(renderLaunchList,60000);
+        renderMissionList();
+        boot.remove();
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>
