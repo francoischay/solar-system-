@@ -98,6 +98,8 @@ stateDiagram-v2
 
 - **Re-choisir le pas courant** n'est pas un geste vide : la fenêtre se recentre autour de la date et la poignée revient à 62 %. C'est un moyen de « ranger » la poignée sans changer ni de pas ni de date.
 - **Menu ouvert, puis tap sur la scène** : le tap agit sur la scène (sélection ou désélection) et le menu reste ouvert. Il n'y a que trois façons de le fermer : choisir un pas, retoucher le bouton d'échelle, ou toucher le bouton Explorer.
+- **Changer de pas en plein élan** : l'élan est coupé net ; la date s'arrête où elle est et la fenêtre se recentre autour d'elle.
+- **Changer de pas pendant la transition de date d'une séquence de tir** : la transition s'arrête net comme n'importe quelle autre ; le reste de la séquence appartient aux [lancements](../explorer/lancements.md).
 - **« Aujourd'hui » à 31 jours comme à 40 ans** : la transition dure 0,95 s dans les deux cas — la vitesse apparente du temps varie énormément, pas la durée.
 - **Le seuil des 9 points de pourcentage** évite que le bouton, posé à mi-hauteur du bord droit, ne se superpose à la poignée quand elle passe près du centre de sa course. Comme toute transition dépose la poignée à 62 % — à 12 points du centre — le bouton peut s'afficher dès que l'écart de date suffit.
 - **Apparition en plein glissement** : en tirant la poignée au-delà de 30 jours d'écart, le bouton surgit à côté du doigt ; en revenant sous le seuil, il disparaît.
