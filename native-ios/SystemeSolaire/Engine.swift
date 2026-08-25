@@ -120,23 +120,12 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     var day = Astro.todayDay
     var az = 0.65, elev = 0.58, roll = 0.0, dist = 230.0, goalDist = 230.0
     var goalAz: Double?, goalElev: Double?, goalRoll: Double?
-    // --- debug : journal fichier des gestes (Documents/gesture.log) ---
-    static let debugLogURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("gesture.log")
-    private static let debugLogHandle: FileHandle? = {
-        try? "".write(to: debugLogURL, atomically: true, encoding: .utf8)
-        return try? FileHandle(forWritingTo: debugLogURL)
-    }()
-    static func dlog(_ msg: String) {
-        let line = String(format: "%.3f ", CACurrentMediaTime()) + msg + "\n"
-        print(msg)
-        if let d = line.data(using: .utf8) { debugLogHandle?.write(d) }
-    }
-    private var lastStateDump: TimeInterval = 0
-
     var panVelocityAz = 0.0, panVelocityElev = 0.0
     var dragging = false
     private var activeOrientationGestures = 0
-    private static let cameraElevationLimit = Double.pi / 2 - 0.025
+    // Même plafond que le prototype HTML (1.35 rad ≈ 77°) : s'approcher du pôle
+    // transforme tout déplacement horizontal en rotation de la vue sur elle-même.
+    private static let cameraElevationLimit = 1.35
     var target = SIMD3<Double>(), focusTarget = SIMD3<Double>()
     private var targetVelocity = SIMD3<Double>()
     private var previousFocusTarget = SIMD3<Double>()
@@ -884,7 +873,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
     // Gestes (appelés du fil principal)
     func panBegan() {
-        Self.dlog("[E] panBegan active=\(activeOrientationGestures)")
         goalAz = nil
         goalElev = nil
         goalRoll = nil
@@ -903,7 +891,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func panEnded(velocityX: Double, velocityY: Double, allowsInertia: Bool = true) {
-        Self.dlog("[E] panEnded vx=\(velocityX) vy=\(velocityY) inertia=\(allowsInertia) active=\(activeOrientationGestures)")
         activeOrientationGestures = max(0, activeOrientationGestures - 1)
         dragging = activeOrientationGestures > 0
         if allowsInertia, activeOrientationGestures == 0 {
@@ -1137,13 +1124,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             detailExpansionProgress = detailExpansionTarget
         }
 
-        if time - lastStateDump > 0.25 {
-            lastStateDump = time
-            Self.dlog(String(format: "[S] az=%.3f elev=%.3f roll=%.3f vAz=%.3f vEl=%.3f drag=%d active=%d goalAz=%@ goalRoll=%@",
-                az, elev, roll, panVelocityAz, panVelocityElev, dragging ? 1 : 0, activeOrientationGestures,
-                goalAz.map { String(format: "%.3f", $0) } ?? "nil",
-                goalRoll.map { String(format: "%.3f", $0) } ?? "nil"))
-        }
         if !dragging {
             az += panVelocityAz * dt
             elev = max(-Self.cameraElevationLimit, min(Self.cameraElevationLimit, elev + panVelocityElev * dt))

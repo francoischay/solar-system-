@@ -33,16 +33,12 @@ struct SceneContainer: UIViewRepresentable {
         pinch.delegate = context.coordinator
         view.addGestureRecognizer(pinch)
 
-        let rotation = UIRotationGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.rotate(_:)))
-        rotation.delegate = context.coordinator
-        view.addGestureRecognizer(rotation)
-
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tap(_:)))
         tap.delegate = context.coordinator
         view.addGestureRecognizer(tap)
 
         context.coordinator.singleFingerPan = pan
-        context.coordinator.twoFingerRecognizers = [twoFingerPan, pinch, rotation]
+        context.coordinator.twoFingerRecognizers = [twoFingerPan, pinch]
         return view
     }
 
@@ -68,8 +64,8 @@ struct SceneContainer: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            // Le geste composé à deux doigts doit pouvoir zoomer, s'orienter et
-            // prendre du roulis dans un même mouvement continu.
+            // Le geste composé à deux doigts doit pouvoir zoomer et s'orienter
+            // dans un même mouvement continu.
             !(gestureRecognizer is UITapGestureRecognizer) && !(otherGestureRecognizer is UITapGestureRecognizer)
         }
 
@@ -98,7 +94,6 @@ struct SceneContainer: UIViewRepresentable {
         }
 
         @objc func pan(_ recognizer: UIPanGestureRecognizer) {
-            Engine.dlog("[G] pan1 state=\(recognizer.state.rawValue) touches=\(recognizer.numberOfTouches)")
             switch recognizer.state {
             case .began:
                 engine.panBegan()
@@ -110,7 +105,6 @@ struct SceneContainer: UIViewRepresentable {
             case .ended:
                 let sinceMulti = CACurrentMediaTime() - lastMultiTouchActivity
                 let v = recognizer.velocity(in: recognizer.view)
-                Engine.dlog("[G] pan1 ENDED v=\(v) sinceMulti=\(sinceMulti)")
                 if sinceMulti < 0.5 {
                     // Doigt restant d'un geste à deux doigts : pas d'inertie.
                     engine.panEnded(velocityX: 0, velocityY: 0, allowsInertia: false)
@@ -126,7 +120,6 @@ struct SceneContainer: UIViewRepresentable {
 
         @objc func twoFingerPan(_ recognizer: UIPanGestureRecognizer) {
             noteMultiTouchActivity()
-            if recognizer.state != .changed { Engine.dlog("[G] pan2 state=\(recognizer.state.rawValue)") }
             switch recognizer.state {
             case .began:
                 cancelSingleFingerPan()
@@ -157,25 +150,6 @@ struct SceneContainer: UIViewRepresentable {
                 engine.pinchBegan()
             case .changed:
                 engine.pinchChanged(scale: Double(recognizer.scale))
-            default:
-                break
-            }
-        }
-
-        @objc func rotate(_ recognizer: UIRotationGestureRecognizer) {
-            noteMultiTouchActivity()
-            if recognizer.state != .changed { Engine.dlog("[G] rot state=\(recognizer.state.rawValue)") }
-            switch recognizer.state {
-            case .began:
-                cancelSingleFingerPan()
-                engine.rollBegan()
-                lastRotation = 0
-            case .changed:
-                let delta = recognizer.rotation - lastRotation
-                engine.rollChanged(delta: -Double(delta))
-                lastRotation = recognizer.rotation
-            case .ended, .cancelled:
-                engine.rollEnded()
             default:
                 break
             }
