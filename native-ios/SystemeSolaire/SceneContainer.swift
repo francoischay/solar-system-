@@ -98,7 +98,7 @@ struct SceneContainer: UIViewRepresentable {
         }
 
         @objc func pan(_ recognizer: UIPanGestureRecognizer) {
-            print("[G] pan1 state=\(recognizer.state.rawValue) touches=\(recognizer.numberOfTouches)")
+            Engine.dlog("[G] pan1 state=\(recognizer.state.rawValue) touches=\(recognizer.numberOfTouches)")
             switch recognizer.state {
             case .began:
                 engine.panBegan()
@@ -110,7 +110,7 @@ struct SceneContainer: UIViewRepresentable {
             case .ended:
                 let sinceMulti = CACurrentMediaTime() - lastMultiTouchActivity
                 let v = recognizer.velocity(in: recognizer.view)
-                print("[G] pan1 ENDED v=\(v) sinceMulti=\(sinceMulti)")
+                Engine.dlog("[G] pan1 ENDED v=\(v) sinceMulti=\(sinceMulti)")
                 if sinceMulti < 0.5 {
                     // Doigt restant d'un geste à deux doigts : pas d'inertie.
                     engine.panEnded(velocityX: 0, velocityY: 0, allowsInertia: false)
@@ -126,7 +126,7 @@ struct SceneContainer: UIViewRepresentable {
 
         @objc func twoFingerPan(_ recognizer: UIPanGestureRecognizer) {
             noteMultiTouchActivity()
-            if recognizer.state != .changed { print("[G] pan2 state=\(recognizer.state.rawValue)") }
+            if recognizer.state != .changed { Engine.dlog("[G] pan2 state=\(recognizer.state.rawValue)") }
             switch recognizer.state {
             case .began:
                 cancelSingleFingerPan()
@@ -164,7 +164,7 @@ struct SceneContainer: UIViewRepresentable {
 
         @objc func rotate(_ recognizer: UIRotationGestureRecognizer) {
             noteMultiTouchActivity()
-            if recognizer.state != .changed { print("[G] rot state=\(recognizer.state.rawValue)") }
+            if recognizer.state != .changed { Engine.dlog("[G] rot state=\(recognizer.state.rawValue)") }
             switch recognizer.state {
             case .began:
                 cancelSingleFingerPan()
