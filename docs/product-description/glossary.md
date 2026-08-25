@@ -46,7 +46,7 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 
 **Lien de date.** Dans le texte du cartouche, toute date reconnue (« 14 janvier 2005 », « janvier 1986 », « 1977 ») est un lien : le toucher lance une transition de date vers ce jour.
 
-**Le panneau Explorer.** Le panneau à trois onglets (Sondes, Satellites, Lancements) ouvert par le bouton de gauche du dock. Un seul panneau, un seul onglet actif. Sélectionner une sonde ou un satellite le ferme ; sélectionner un lancement le laisse ouvert.
+**Le panneau Explorer.** Le panneau à trois onglets (Sondes, Satellites, Lancements) ouvert par le bouton de gauche du dock. Un seul panneau, un seul onglet actif. Sélectionner une sonde, un satellite ou un lancement le ferme.
 
 **La poignée.** La pastille blanche datée, sur le bord droit de l'écran, qui commande la timeline. Sa position verticale représente la date courante dans la fenêtre de temps visible. Au repos après un recadrage, elle se place à 62 % de la hauteur.
 
