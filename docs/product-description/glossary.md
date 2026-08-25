@@ -50,6 +50,8 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 
 **La poignée.** La pastille blanche datée, sur le bord droit de l'écran, qui commande la timeline. Sa position verticale représente la date courante dans la fenêtre de temps visible. Au repos après un recadrage, elle se place à 62 % de la hauteur.
 
+**La course.** Le segment vertical que la poignée peut parcourir sur le bord droit de l'écran, entre une marge haute et une marge basse. La position de la poignée s'exprime en pourcentage de la course (0 % en haut, 100 % en bas) ; ses extrémités (2,5 %) déclenchent le *défilement au bord*.
+
 **Le bouton « Aujourd'hui ».** Le bouton flottant à droite qui ramène la date à maintenant. Il n'apparaît que si la date simulée s'écarte de plus de 30 jours d'aujourd'hui, que la poignée est à plus de 9 points de pourcentage du centre, et qu'aucune transition de date n'est en cours.
 
 **Le menu d'échelle.** Le menu ouvert par le bouton de droite du dock : Heure, Jour, Mois, Année. Il fixe le *pas* de la timeline : la fenêtre de temps que représente la hauteur de la course de la poignée (4,2 jours, 100 jours, 3 044 jours, 36 525 jours).
@@ -79,6 +81,8 @@ Le vocabulaire employé dans ces documents. Quand un document utilise un de ces 
 **Roulis.** La rotation de l'image autour de l'axe de visée, commandée par la torsion à deux doigts. Manipulation directe, sans inertie ; remis à zéro au retour à la vue d'ensemble.
 
 **Zoom.** Le pincement. Sur une sonde sélectionnée, il ne change pas la distance de caméra mais l'ampleur du cadrage de sa trajectoire (de 0,3× à 3×) ; partout ailleurs, il change la distance de caméra (1,4 à 560).
+
+**Suivi direct.** Le mode de manipulation où la valeur suit exactement le doigt, sans lissage ni inertie tant que le doigt reste posé : la poignée de timeline et le tirage du cartouche sont en suivi direct ; l'orientation de caméra, amortie et dotée d'élan, ne l'est pas.
 
 **Rayon de saisie.** La zone tactile d'un astre, plus large que son dessin : au moins 22 points d'écran, davantage pour les gros corps. En cas de chevauchement, la priorité est : lune, puis sonde ou satellite, puis planète ; à priorité égale, le plus proche du doigt.
 
