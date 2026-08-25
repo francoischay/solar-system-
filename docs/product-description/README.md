@@ -136,21 +136,21 @@ Le statut est `not started`, `drafted` ou `verified`.
 | --- | --- |
 | glossary.md | drafted |
 | bug-triage.md | not started |
-| verification/ (4 checklists) | not started |
-| foundations/gestes-et-camera.md | not started |
-| foundations/temps-et-timeline.md | not started |
-| foundations/scene-et-objets.md | not started |
-| foundations/donnees-et-reseau.md | not started |
-| camera/orbite-libre.md | not started |
+| verification/ (4 checklists) | drafted (fondations, camera-et-selection) |
+| foundations/gestes-et-camera.md | drafted |
+| foundations/temps-et-timeline.md | drafted |
+| foundations/scene-et-objets.md | drafted |
+| foundations/donnees-et-reseau.md | drafted |
+| camera/orbite-libre.md | drafted |
 | camera/geste-compose.md | not started |
-| selection/toucher-un-astre.md | not started |
-| selection/cartouche.md | not started |
+| selection/toucher-un-astre.md | drafted |
+| selection/cartouche.md | drafted |
 | timeline/glissement.md | not started |
 | timeline/echelle-et-aujourdhui.md | not started |
 | explorer/panneau.md | not started |
 | explorer/sondes.md | not started |
 | explorer/satellites.md | not started |
-| explorer/lancements.md | not started |
+| explorer/lancements.md | drafted |
 
 ## Référence
 
