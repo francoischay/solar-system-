@@ -20,7 +20,16 @@ Non vérifiable à la main :
 
 ## camera/geste-compose.md
 
-*(Tableau à compléter quand le document est accepté ; IDs COMPO-NN.)*
+| ID | P | Appareil | Affirmation | Mise en place | Étapes | Attendu | Résultat |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| COMPO-01 | P1 | simulateur | Orientation et zoom se combinent dans un même mouvement continu ([pendant le geste](../camera/geste-compose.md#pendant-le-geste)). | Vue d'ensemble. | 1. ⌥-glisser en écartant et en déplaçant les deux points à la fois. | La caméra tourne et s'approche en même temps, sans à-coups ni bascule de mode. | — |
+| COMPO-02 | P1 | simulateur | Il n'y a pas de geste de torsion : l'horizon reste à plat ([le cas simple](../camera/geste-compose.md#le-cas-simple)). | Vue d'ensemble. | 1. ⌥-glisser circulaire (rotation des deux doigts l'un autour de l'autre). | L'image ne pivote jamais autour de l'axe de visée ; seuls orientation et zoom répondent. | — |
+| COMPO-03 | P1 | simulateur | Fin de geste sans élan, quelle que soit la vivacité ([les doigts se lèvent](../camera/geste-compose.md#les-doigts-se-lèvent)). | Vue d'ensemble. | 1. ⌥⇧-glisser vivement, relâcher en plein mouvement. | Arrêt exactement au relâchement. | — |
+| COMPO-04 | P1 | appareil | Le doigt restant après un geste à deux doigts ne déclenche pas d'élan (fenêtre 0,5 s) ([les doigts se lèvent](../camera/geste-compose.md#les-doigts-se-lèvent)). | Vue d'ensemble. | 1. Manipuler à deux doigts, lever un seul doigt.<br>2. Continuer à glisser avec l'autre et le lever vivement dans la demi-seconde. | Aucun élan au lever. Noter aussi si le doigt restant oriente encore (question ouverte du document). | — |
+| COMPO-05 | P2 | simulateur | Revenir à l'écartement initial rend la distance initiale (pas de dérive) ([pendant le geste](../camera/geste-compose.md#pendant-le-geste)). | Une planète sélectionnée. | 1. Pincer pour approcher, puis revenir exactement à l'écartement de départ sans lever. | La distance apparente revient à celle du début du pincement. | — |
+| COMPO-06 | P2 | simulateur | Pincement pur pendant un recadrage : la visée d'orientation se finit, la distance obéit aux doigts ([cas limites](../camera/geste-compose.md#cas-limites)). | Panneau > Sondes. | 1. Sélectionner une sonde.<br>2. Pendant le voyage de caméra, pincer sans glisser. | La rotation programmée continue ; la distance répond au pincement. | — |
+| COMPO-07 | P2 | simulateur | Pincer sur une sonde sélectionnée invisible règle une ampleur sans retour visuel ([cas limites](../camera/geste-compose.md#cas-limites)) (défaut soupçonné). | Sonde sélectionnée, puis date tirée hors de sa période. | 1. Pincer largement.<br>2. Ramener la date dans la période. | Noter : rien ne bouge à l'étape 1 ; au retour de la sonde, le cadrage applique l'ampleur réglée « à l'aveugle ». | — |
+| COMPO-08 | P3 | simulateur | Un troisième doigt est ignoré ([annulation et interruption](../camera/geste-compose.md#annulation-et-interruption)). | Vue d'ensemble, sur appareil de préférence. | 1. Manipuler à deux doigts, poser un troisième. | Le geste continue sur les deux premiers, sans saut. | — |
 
 ## selection/toucher-un-astre.md
 

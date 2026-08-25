@@ -137,7 +137,7 @@ Le statut est `not started`, `drafted` ou `verified`.
 | --- | --- |
 | glossary.md | drafted |
 | bug-triage.md | not started |
-| verification/ (4 checklists) | drafted (fondations, camera-et-selection) |
+| verification/ (4 checklists) | drafted |
 | foundations/gestes-et-camera.md | drafted |
 | foundations/temps-et-timeline.md | drafted |
 | foundations/scene-et-objets.md | drafted |
