@@ -20,6 +20,10 @@ final class Planet {
 final class MoonBody {
     let spec: MoonSpec
     let node = SCNNode()
+    /// Anneau d'orbite, retracé tant qu'il n'est pas refermé
+    let orbitNode = SCNNode()
+    var drawnSweep = -1.0
+    var drawnRadius = -1.0
     let trail: TrailLine
     let phase: Double
     unowned let planet: Planet
@@ -36,6 +40,9 @@ final class MoonSystem {
     unowned let planet: Planet
     let group = SCNNode()
     var moons: [MoonBody] = []
+    /// Avancée de l'apparition, 0 à 1. Progression linéaire — un amortissement
+    /// n'atteindrait jamais tout à fait 1 et le cercle resterait ouvert d'un cheveu.
+    var appearance = 0.0
     init(planet: Planet) { self.planet = planet }
 }
 
@@ -176,11 +183,23 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private var launchClock = 0.0
     /// Recul, visée et défilement de la date menés ensemble (`arc`), plongée qui
     /// reprend le dézoom en route, puis la mise à feu une fois la caméra en place.
-    private enum LaunchPhase { case arc, dive, flight }
+    private enum LaunchPhase { case arc, dive, hold, flight }
     private var launchPhase = LaunchPhase.arc
     private var launchMoonPush = 0.0, launchMoonPushVelocity = 0.0
     private var launchAimAz = 0.0, launchAimElev = 0.0
     private var launchProgressShown = -1.0
+    /// Avancée de l'ascension (0…1), relue par le cadrage drone
+    private var launchAscentProgress = 0.0
+    /// Accrochage du drone : 0 la caméra pivote sur le centre du globe, 1 elle
+    /// suit la fusée. Amorti, pour que la prise du pas de tir soit un glissement.
+    private var launchFocusBlend = 0.0, launchFocusBlendVelocity = 0.0
+    /// Le drone rend la main au globe dès qu'on reprend la timeline : pivoter sur
+    /// la fusée pendant un défilement de date ferait valser le globe hors du cadre.
+    private var launchDroneReleased = false
+    private var launchHoldClock = 0.0
+    /// Tremblement de la caméra : enfle pendant la retenue, s'éteint après le lâcher
+    private var launchShake = 0.0
+    private var timelineHapticStep: Double?
     private var launchCoreColor = UIColor.white
     private var launchTrailColor = UIColor.white
     private var launchTrailCamera = SIMD3<Double>()
@@ -197,6 +216,21 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     /// Écart de visée sous lequel la plongée démarre sans attendre la fin du
     /// pivot : les deux mouvements se recouvrent au lieu de s'enchaîner.
     static let LAUNCH_AIM_HANDOFF = 0.25 // ~14°
+    /// Vue drone : distance au pas de tir au moment de la mise à feu. La caméra
+    /// s'en écarte ensuite jusqu'à LAUNCH_DIVE_DIST au rythme de l'ascension.
+    static let LAUNCH_DRONE_DIST = 0.9
+    /// Retenue au sol : le drone est posé, les moteurs montent en puissance, la
+    /// fusée n'est pas encore lâchée. Assez long pour que le grondement s'installe.
+    static let LAUNCH_HOLD = 1.5
+    /// Amplitude du tremblement de caméra à l'instant du lâcher, en unités de scène
+    static let LAUNCH_SHAKE = 0.011
+    /// Durée du tracé d'une orbite de lune, de la lune au cercle refermé
+    static let MOON_REVEAL = 1.6
+    /// Effacement au dézoom : bien plus court que le tracé. Ce qu'on quitte n'a
+    /// pas à se raconter, et l'anneau ne doit pas traîner sur l'astre suivant.
+    static let MOON_HIDE = 0.28
+    /// Durée de l'ascension — le grondement haptique court exactement dessus
+    static let LAUNCH_RISE = 3.4
 
     // Satellites
     let satelliteOrbits = SCNNode()
@@ -394,17 +428,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             let system = MoonSystem(planet: planet)
             scene.rootNode.addChildNode(system.group)
             for (index, spec) in specs.enumerated() {
-                var orbitPoints: [SIMD3<Double>] = []
-                for k in 0...64 {
-                    let a = Double(k) / 64 * Astro.TAU
-                    orbitPoints.append(SIMD3(cos(a) * spec.radius, 0, sin(a) * spec.radius))
-                }
-                if let g = Geo.lineGeometry(points: orbitPoints, color: uiColor(0xdce0ff)) {
-                    let orbitNode = SCNNode(geometry: g)
-                    orbitNode.opacity = 0.08
-                    system.group.addChildNode(orbitNode)
-                }
                 let moon = MoonBody(spec: spec, phase: Double(index) * 1.7, planet: planet)
+                moon.orbitNode.opacity = 0.08
+                system.group.addChildNode(moon.orbitNode)
                 let sphere = Geo.sphereGeometry(radius: spec.size, widthSegments: 20, heightSegments: 14)
                 let material = SCNMaterial()
                 material.lightingModel = .blinn
@@ -731,6 +757,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     // MARK: Explorer
 
     func setExploreView(_ view: ExploreView) {
+        if view != exploreView { view == .none ? Haptics.shared.closed() : Haptics.shared.opened() }
         if view != .none { lastExploreSection = view }
         exploreView = view
         if view == .satellites {
@@ -750,6 +777,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func selectMission(_ mission: Mission) {
+        Haptics.shared.picked()
         // Sonde hors de sa période : on cale la date sur sa borne, sinon il n'y a rien à voir
         let years = missionYears(mission.spec)
         let first = Astro.dayForYear(years.start)
@@ -770,6 +798,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func selectSatellite(_ model: SatModel) {
+        Haptics.shared.picked()
         setSelected(.satellite(model))
         // se placer du côté du satellite, sinon il se retrouve derrière la Terre
         if !model.isConstellation, let offset = satellitePosition(model, day: propagationDay()), simd_length_squared(offset) > 0 {
@@ -782,6 +811,8 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func selectLaunch(_ launch: LaunchSpec) {
+        Haptics.shared.picked()
+        Haptics.shared.prepare() // le grondement arrive dans quelques secondes
         setSelected(.planet(earth))
         selectedLaunch = launch
         selectionTitle = launch.n
@@ -807,6 +838,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         launchClock = 0
         launchPhase = .arc
         launchProgressShown = -1
+        launchAscentProgress = 0
+        launchFocusBlend = 0
+        launchFocusBlendVelocity = 0
+        launchDroneReleased = false
+        launchHoldClock = 0
         let targetDay = Astro.day(from: launch.date)
         animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
         // Le globe aura tourné d'ici la date de tir : on vise son orientation d'arrivée
@@ -842,6 +878,29 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         if let goal = goalElev { worst = max(worst, abs(goal - elev)) }
         if let goal = goalRoll { worst = max(worst, abs(atan2(sin(goal - roll), cos(goal - roll)))) }
         return worst
+    }
+
+    /// Portion d'orbite déjà tracée. Le trait se déroule *derrière* la lune et se
+    /// termine sur elle : à chaque instant la lune coiffe l'extrémité de l'arc.
+    ///
+    /// L'anneau ne suit pas la vraie trajectoire, et c'est délibéré. L'ondulation
+    /// réelle vaut `sin(a · 0,7)` : de période non entière sur un tour, elle ne se
+    /// referme pas — après 2π le trait revient à une autre altitude et rate la
+    /// lune, ce qui se lit comme un défaut d'affichage. On lui substitue
+    /// `y_lune · cos(a − tête)`, un cercle incliné : périodique donc parfaitement
+    /// refermé, et qui passe exactement par la lune à l'instant du tracé.
+    private func orbitArc(_ moon: MoonBody, radius: Double, sweep: Double) -> SCNGeometry? {
+        guard sweep > 0.004 else { return nil }
+        let head = moonAngle(phase: moon.phase, period: moon.spec.period, day: day)
+        let lift = sin(head * 0.7) * 0.18 // hauteur de la lune à cet instant
+        let steps = max(2, Int(72 * sweep))
+        let points = (0...steps).map { k -> SIMD3<Double> in
+            // k = steps tombe pile sur la lune ; la queue recule à mesure que
+            // l'arc s'allonge, et le cercle se referme sur elle.
+            let a = head - Astro.TAU * sweep * (1 - Double(k) / Double(steps))
+            return SIMD3(cos(a) * radius, lift * cos(a - head), sin(a) * radius)
+        }
+        return Geo.lineGeometry(points: points, color: uiColor(0xdce0ff))
     }
 
     private func buildLaunchArc(points: [SIMD3<Double>], color: UIColor) {
@@ -997,11 +1056,21 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func placeCamera() {
-        cameraNode.position = SCNVector3(
-            Float(target.x + sin(az) * cos(elev) * dist),
-            Float(target.y + sin(elev) * dist),
-            Float(target.z + cos(az) * cos(elev) * dist)
+        var eye = SIMD3(
+            target.x + sin(az) * cos(elev) * dist,
+            target.y + sin(elev) * dist,
+            target.z + cos(az) * cos(elev) * dist
         )
+        if launchShake > 1e-5 {
+            // Trois fréquences incommensurables (~15 à 21 Hz) : le motif ne se
+            // répète pas, la caméra vibre au lieu d'osciller. Le décalage est
+            // appliqué avant la visée, donc la scène tangue légèrement aussi.
+            let t = lastFrameTime
+            eye.x += launchShake * sin(t * 97)
+            eye.y += launchShake * sin(t * 131 + 1.7)
+            eye.z += launchShake * sin(t * 113 + 3.1)
+        }
+        cameraNode.position = SCNVector3(eye)
         // Le roulis est ajouté dans le repère local de la caméra, à partir d'une
         // base recalculée du vecteur haut du monde. Sans ce `up:` explicite,
         // `look(at:)` repart de l'orientation déjà roulée et le roulis
@@ -1141,7 +1210,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             }
         }
 
-        for system in moonSystems where !system.group.isHidden {
+        // Une lune en train de s'effacer reste à l'écran un instant : on cesse de
+        // la proposer au doigt bien avant qu'elle ait fini de disparaître.
+        for system in moonSystems where system.appearance > 0.5 {
             for moon in system.moons {
                 consider(.moon(moon), node: moon.node, radius: moon.hitRadius, priority: 0)
             }
@@ -1161,10 +1232,15 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         if selectedLaunch != nil {
             // Sortir d'un lancement remonte d'un cran, comme pour un satellite :
             // on retrouve la Terre, pas le système solaire.
+            Haptics.shared.dismissed()
             dismissLaunch(selecting: best?.selection ?? .planet(earth))
         } else if let best {
-            if best.selection != selected { setSelected(best.selection) }
+            if best.selection != selected {
+                Haptics.shared.selected()
+                setSelected(best.selection)
+            }
         } else if selected != nil {
+            Haptics.shared.dismissed()
             reset()
         }
     }
@@ -1217,7 +1293,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private var lastSlideDay = 0.0
     private var lastSlideTime: TimeInterval = 0
 
+    /// Vrai de la sélection du lancement à la fin de l'ascension : la date est
+    /// verrouillée sur celle du tir, et le drone garde la main sur le cadrage.
+    private var launchSequenceRunning: Bool {
+        selectedLaunch != nil && !launchArcPoints.isEmpty && launchAscentProgress < 1
+    }
+
     func timelineDragBegan() {
+        guard !launchSequenceRunning else { return Haptics.shared.refused() }
+        Haptics.shared.grabbed()
+        launchDroneReleased = true
         dateTransition = nil
         timelineVelocity = 0
         dragStartTop = handleTop
@@ -1226,6 +1311,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func timelineDragChanged(offsetY: Double, height: Double) {
+        guard !launchSequenceRunning else { return Haptics.shared.refused() }
         let p = max(0, min(1, dragStartTop / 100 + offsetY / height))
         let nextDay = timelineCenter + (p - 0.5) * dayRange
         let now = CACurrentMediaTime()
@@ -1243,11 +1329,13 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func timelineDragEnded() {
+        guard !launchSequenceRunning else { return }
         edgeDirection = 0
         if abs(timelineVelocity) < 0.003 { timelineVelocity = 0 }
     }
 
     func setDayRange(_ range: Double, short: String) {
+        Haptics.shared.picked()
         dateTransition = nil
         timelineVelocity = 0
         edgeDirection = 0
@@ -1333,6 +1421,17 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             day += step
             timelineCenter += step
             uiDirty = true
+        }
+
+        // Cran haptique de la timeline : un tic par pas franchi. Nos propres
+        // animations de date sont exclues, sinon un saut sur la date de tir
+        // déclencherait une rafale.
+        if dateTransition == nil, dayRange > 0 {
+            let step = (day / (dayRange / 48)).rounded(.down)
+            if let previous = timelineHapticStep, previous != step { Haptics.shared.tick() }
+            timelineHapticStep = step
+        } else {
+            timelineHapticStep = nil
         }
 
         let rawVelocity = (day - previousDay) / max(dt, 0.001)
@@ -1474,16 +1573,43 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             launchMoonPush, toward: selectedLaunch == nil ? 0 : 1,
             velocity: &launchMoonPushVelocity, smoothTime: 0.9, deltaTime: dt
         )
+        // Le tracé doit se refermer après le rapprochement, dont la durée dépend
+        // du chemin parcouru — une durée fixe ne suffirait pas. Plutôt que de le
+        // retenir à un palier, ce qui le fige puis le fait repartir, on le
+        // ralentit continûment tant que la caméra a du chemin devant elle. Il
+        // n'arrête jamais d'avancer et reprend sa cadence à mesure qu'elle se pose.
+        let travel = min(1, abs(dist - goalDist) / max(0.001, goalDist))
+        let revealRate = dt / (Self.MOON_REVEAL * (1 + 1.5 * travel))
         for system in moonSystems {
             system.group.position = system.planet.node.position
             let parentSelected = selected == .planet(system.planet)
             let moonSelected = system.moons.contains { selected == .moon($0) }
-            let visible = parentSelected || moonSelected
+            // Les lunes et leurs orbites ne surgissent pas : la lune paraît, puis
+            // son orbite s'enroule devant elle jusqu'à refermer le cercle.
+            let wanted = (parentSelected || moonSelected) ? 1.0 : 0.0
+            // Le ralentissement lié au voyage de la caméra ne vaut qu'à l'aller :
+            // au dézoom il ferait justement traîner l'anneau le plus longtemps.
+            let rate = wanted > 0 ? revealRate : dt / Self.MOON_HIDE
+            system.appearance += max(-rate, min(rate, wanted - system.appearance))
+            let visible = system.appearance > 0.004
             system.group.isHidden = !visible
+            // Le trait accélère puis ralentit en se refermant ; la lune, elle,
+            // est là tout de suite — c'est d'elle que part le tracé.
+            // Décélération vers la fermeture, sans temps mort au démarrage :
+            // le ralentissement du début est déjà porté par `revealRate`.
+            let p = system.appearance
+            let sweep = p * (2 - p)
+            let bodyOpacity = CGFloat(min(1, p * 3))
             let push = system.planet === earth ? launchMoonPush : 0
             for moon in system.moons {
                 let radius = moon.spec.radius + (Self.LAUNCH_MOON_RADIUS - moon.spec.radius) * push
                 moon.node.position = SCNVector3(moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: radius, day: day))
+                moon.node.opacity = bodyOpacity
+                if abs(sweep - moon.drawnSweep) > 0.004 || abs(radius - moon.drawnRadius) > 0.001 {
+                    moon.drawnSweep = sweep
+                    moon.drawnRadius = radius
+                    moon.orbitNode.geometry = orbitArc(moon, radius: radius, sweep: sweep)
+                }
                 if visible, trailStrength > 0.006 {
                     let span = min(abs(moon.spec.period) * 0.85, 2 + trailEnergy * 0.1)
                     var points: [SIMD3<Double>] = []
@@ -1493,7 +1619,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                         let parent = planetPosition(system.planet.spec, day: trailDay)
                         points.append(parent + moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: radius, day: trailDay))
                     }
-                    moon.trail.update(points: points, opacity: trailStrength * 0.85)
+                    moon.trail.update(points: points, opacity: trailStrength * 0.85 * sweep)
                 } else {
                     moon.trail.update(points: [], opacity: 0)
                 }
@@ -1501,23 +1627,61 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         }
 
         // Lancement : une seule ascension, puis la trajectoire reste affichée
+        if selectedLaunch == nil { launchShake = 0 }
         if selectedLaunch != nil, !launchArcPoints.isEmpty {
+            // Le drone accroche la fusée au moment de plonger et ne la lâche plus :
+            // le plan se referme sur elle, pas sur le globe.
+            let following = launchPhase != .arc && !launchDroneReleased
+            launchFocusBlend = smoothDamp(
+                launchFocusBlend, toward: following ? 1 : 0,
+                velocity: &launchFocusBlendVelocity, smoothTime: 0.6, deltaTime: dt
+            )
             switch launchPhase {
             case .arc:
+                launchShake = 0
                 goalDist = Self.LAUNCH_PULLBACK
                 // Recul, visée et défilement de la date courent ensemble. C'est
                 // le pivot qui commande la suite : dès qu'il ne reste qu'un filet
                 // d'écart, la plongée reprend le dézoom en cours de route.
                 if launchAimResidual < Self.LAUNCH_AIM_HANDOFF { launchPhase = .dive }
             case .dive:
-                goalDist = Self.LAUNCH_DIVE_DIST
-                if abs(dist - goalDist) < 0.05 * goalDist { launchPhase = .flight }
+                // La descente est indexée sur l'accrochage : la distance se compte
+                // depuis la cible, et tant qu'elle n'a pas rejoint le pas de tir,
+                // se rapprocher ferait passer la caméra sous la surface.
+                goalDist = Self.LAUNCH_PULLBACK
+                    + (Self.LAUNCH_DRONE_DIST - Self.LAUNCH_PULLBACK) * launchFocusBlend
+                // Drone posé : on marque un temps avant d'allumer.
+                if launchFocusBlend > 0.97, abs(dist - goalDist) < 0.15 * goalDist {
+                    launchPhase = .hold
+                    launchHoldClock = 0
+                    Haptics.shared.touchdown() // le drone se pose
+                    Haptics.shared.spoolUp(duration: Self.LAUNCH_HOLD) // les moteurs montent
+                }
+            case .hold:
+                goalDist = Self.LAUNCH_PULLBACK
+                    + (Self.LAUNCH_DRONE_DIST - Self.LAUNCH_PULLBACK) * launchFocusBlend
+                launchHoldClock += dt
+                // Le sol tremble de plus en plus fort sous la poussée retenue
+                launchShake = Self.LAUNCH_SHAKE * pow(min(1, launchHoldClock / Self.LAUNCH_HOLD), 2.2)
+                if launchHoldClock >= Self.LAUNCH_HOLD {
+                    launchPhase = .flight
+                    Haptics.shared.launchRumble(duration: Self.LAUNCH_RISE)
+                }
             case .flight:
-                goalDist = Self.LAUNCH_DIVE_DIST
                 launchClock += dt // mise à feu : la caméra est en place
+                // La secousse s'éteint en ~1 s : la fusée s'arrache, le sol se tait
+                launchShake = max(0, launchShake - dt * Self.LAUNCH_SHAKE)
             }
-            let rise = 3.4
+            let rise = Self.LAUNCH_RISE
             let progress = min(1, max(0, launchClock) / rise)
+            launchAscentProgress = progress
+            if launchPhase == .flight {
+                // Le drone s'écarte au rythme de la fusée, en douceur aux deux
+                // bouts, jusqu'à retrouver la distance de fin de séquence.
+                let eased = progress * progress * (3 - 2 * progress)
+                goalDist = Self.LAUNCH_DRONE_DIST
+                    + (Self.LAUNCH_DIVE_DIST - Self.LAUNCH_DRONE_DIST) * eased
+            }
             // Le panache est un ruban tourné vers l'œil : il se reconstruit à
             // l'avancée de la fusée, et quand la caméra a bougé.
             let eye = earth.node.convertPosition(cameraNode.position, from: nil).simd3
@@ -1608,9 +1772,18 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             focusTarget = SIMD3()
             goalDist = 230
         } else if let launch = selectedLaunch, !launchArcPoints.isEmpty {
-            // Le pivot reste le centre du globe, même pendant la plongée : la
-            // rotation tourne autour de la Terre, pas autour du pas de tir.
-            focusTarget = earth.node.position.simd3
+            // Vue drone : le pivot quitte le centre du globe le temps du tir. Il
+            // glisse vers le pas de tir pendant la plongée, monte avec la fusée,
+            // puis rend la main au globe une fois l'ascension finie.
+            // L'identité ne change jamais de toute la séquence : le verrouillage
+            // image par image reste actif d'un bout à l'autre, donc aucune remise
+            // à zéro de vélocité, et le globe qui dérive sur son orbite pendant un
+            // défilement de date est compensé comme pour n'importe quel astre.
+            // Toute la forme du mouvement tient dans l'amorti de l'accrochage.
+            let center = earth.node.position.simd3
+            let local = SCNVector3(launchArcPoint(at: launchAscentProgress))
+            let onRocket = earth.node.convertPosition(local, to: nil).simd3
+            focusTarget = center + (onRocket - center) * launchFocusBlend
             focusIdentity = .launch(launch.id)
         } else if let selection = selected {
             switch selection {

@@ -82,6 +82,7 @@ struct ContentView: View {
                 Spacer()
 
                 Button {
+                    scaleMenuOpen ? Haptics.shared.closed() : Haptics.shared.opened()
                     withAnimation(.easeOut(duration: 0.16)) { scaleMenuOpen.toggle() }
                 } label: {
                     Text(engine.scaleShort)
@@ -213,8 +214,8 @@ struct InfoCard: View {
             if let detail = engine.selectionDetail {
                 ScrollView {
                     Text(DateLinker.attributed(detail))
-                    .font(.system(size: 12.5))
-                    .lineSpacing(3.5)
+                    .font(.system(size: 15))
+                    .lineSpacing(4.5)
                     .foregroundStyle(.white.opacity(0.74))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18)
@@ -354,6 +355,9 @@ struct InfoCard: View {
 
     private func snap(expanded: Bool) {
         let shouldExpand = expanded && engine.selectionDetail != nil
+        if shouldExpand != detailExpanded {
+            shouldExpand ? Haptics.shared.opened() : Haptics.shared.closed()
+        }
         detailExpanded = shouldExpand
         withAnimation(.spring(duration: 0.32, bounce: 0)) {
             sheetHeight = shouldExpand ? clampedMaxHeight : minHeight
