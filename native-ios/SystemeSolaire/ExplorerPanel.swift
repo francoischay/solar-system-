@@ -73,7 +73,9 @@ struct MissionList: View {
                 ForEach(Array(engine.missions.enumerated()), id: \.offset) { _, mission in
                     let selected = engine.selected == .mission(mission)
                     Button {
-                        engine.selectMission(mission)
+                        // Même animation qu'à l'ouverture : sinon une insertion
+                        // interrompue peut faire réapparaître le panneau.
+                        withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(mission.spec.n)
@@ -88,6 +90,8 @@ struct MissionList: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(selected ? Color(red: 0.96, green: 0.95, blue: 1) : Color(red: 0.047, green: 0.055, blue: 0.216).opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+                        // La pastille entière répond, pas seulement les deux textes
+                        .contentShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
             }
@@ -114,7 +118,7 @@ struct SatelliteList: View {
                 ForEach(Array(engine.satModels.enumerated()), id: \.offset) { _, model in
                     let selected = engine.selected == .satellite(model)
                     Button {
-                        engine.selectSatellite(model)
+                        withAnimation(.easeOut(duration: 0.18)) { engine.selectSatellite(model) }
                     } label: {
                         HStack(spacing: 11) {
                             Text(model.spec.icon)
@@ -135,6 +139,8 @@ struct SatelliteList: View {
                         }
                         .padding(10)
                         .background(selected ? Color(red: 0.96, green: 0.95, blue: 1) : Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.28), in: RoundedRectangle(cornerRadius: 15))
+                        // La ligne entière répond, y compris le vide et les marges
+                        .contentShape(RoundedRectangle(cornerRadius: 15))
                     }
                 }
             }
@@ -167,7 +173,7 @@ struct LaunchList: View {
                 ForEach(engine.launchSpecs) { launch in
                     let selected = engine.selectedLaunch == launch
                     Button {
-                        engine.selectLaunch(launch)
+                        withAnimation(.easeOut(duration: 0.18)) { engine.selectLaunch(launch) }
                     } label: {
                         HStack(spacing: 11) {
                             Image(systemName: "arrow.up")
@@ -197,6 +203,8 @@ struct LaunchList: View {
                         }
                         .padding(10)
                         .background(selected ? Color(red: 0.96, green: 0.95, blue: 1) : Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.28), in: RoundedRectangle(cornerRadius: 15))
+                        // La ligne entière répond, y compris le vide et les marges
+                        .contentShape(RoundedRectangle(cornerRadius: 15))
                     }
                 }
             }

@@ -66,7 +66,7 @@ struct ContentView: View {
             HStack {
                 Button {
                     withAnimation(.easeOut(duration: 0.18)) {
-                        engine.setExploreView(engine.exploreView == .none ? .missions : .none)
+                        engine.setExploreView(engine.exploreView == .none ? engine.lastExploreSection : .none)
                     }
                     scaleMenuOpen = false
                 } label: {

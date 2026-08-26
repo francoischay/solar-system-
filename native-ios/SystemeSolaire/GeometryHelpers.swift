@@ -11,24 +11,87 @@ extension SCNQuaternion {
 }
 
 enum Geo {
-    /// Polyligne (line strip) — équivalent de THREE.Line
-    static func lineGeometry(points: [SIMD3<Double>], color: UIColor, additive: Bool = false) -> SCNGeometry? {
+    /// Polyligne (line strip) — équivalent de THREE.Line.
+    /// Avec `texture`, chaque sommet reçoit u = progression le long de la ligne
+    /// (v au centre) : la teinte et l'alpha suivent alors le dégradé de l'image.
+    static func lineGeometry(points: [SIMD3<Double>], color: UIColor, additive: Bool = false,
+                             texture: UIImage? = nil) -> SCNGeometry? {
         guard points.count >= 2 else { return nil }
         let vertices = points.map { SCNVector3($0) }
-        let source = SCNGeometrySource(vertices: vertices)
+        var sources = [SCNGeometrySource(vertices: vertices)]
+        if texture != nil {
+            let uvs = (0..<points.count).map {
+                CGPoint(x: CGFloat($0) / CGFloat(points.count - 1), y: 0.5)
+            }
+            sources.append(SCNGeometrySource(textureCoordinates: uvs))
+        }
         var indices: [Int32] = []
         indices.reserveCapacity((points.count - 1) * 2)
         for i in 0..<(points.count - 1) {
             indices.append(Int32(i)); indices.append(Int32(i + 1))
         }
         let element = SCNGeometryElement(indices: indices, primitiveType: .line)
-        let geometry = SCNGeometry(sources: [source], elements: [element])
+        let geometry = SCNGeometry(sources: sources, elements: [element])
         let material = SCNMaterial()
         material.lightingModel = .constant
-        material.diffuse.contents = color
+        if let texture {
+            material.diffuse.contents = texture
+            material.diffuse.wrapS = .clamp
+            material.diffuse.wrapT = .clamp
+            material.multiply.contents = color
+        } else {
+            material.diffuse.contents = color
+        }
         material.writesToDepthBuffer = false
         material.readsFromDepthBuffer = true
         if additive { material.blendMode = .add }
+        geometry.materials = [material]
+        return geometry
+    }
+
+    /// Ruban tourné vers la caméra (panache de moteur) : deux sommets par point,
+    /// u = progression le long de la traînée, v = travers du ruban. La largeur
+    /// est donnée point par point, la texture porte le dégradé vers le transparent.
+    static func ribbonGeometry(points: [SIMD3<Double>], halfWidths: [Double],
+                               viewPoint: SIMD3<Double>, color: UIColor, texture: UIImage) -> SCNGeometry? {
+        guard points.count >= 2, halfWidths.count == points.count else { return nil }
+        var vertices: [SCNVector3] = [], uvs: [CGPoint] = []
+        vertices.reserveCapacity(points.count * 2)
+        uvs.reserveCapacity(points.count * 2)
+        var previousSide = SIMD3<Double>(0, 1, 0)
+        for (i, p) in points.enumerated() {
+            var tangent = points[min(i + 1, points.count - 1)] - points[max(i - 1, 0)]
+            if simd_length_squared(tangent) < 1e-12 { tangent = SIMD3(0, 1, 0) }
+            // Le ruban se tourne vers l'œil : il garde son épaisseur sous tous les angles.
+            var side = simd_cross(simd_normalize(tangent), viewPoint - p)
+            if simd_length_squared(side) < 1e-12 { side = previousSide } else { side = simd_normalize(side) }
+            previousSide = side
+            let u = CGFloat(i) / CGFloat(points.count - 1)
+            vertices.append(SCNVector3(p - side * halfWidths[i]))
+            vertices.append(SCNVector3(p + side * halfWidths[i]))
+            uvs.append(CGPoint(x: u, y: 0))
+            uvs.append(CGPoint(x: u, y: 1))
+        }
+        var indices: [Int32] = []
+        indices.reserveCapacity((points.count - 1) * 6)
+        for i in 0..<(points.count - 1) {
+            let o = Int32(i * 2)
+            indices.append(contentsOf: [o, o + 1, o + 2, o + 2, o + 1, o + 3])
+        }
+        let geometry = SCNGeometry(
+            sources: [SCNGeometrySource(vertices: vertices), SCNGeometrySource(textureCoordinates: uvs)],
+            elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)]
+        )
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = texture
+        material.diffuse.wrapS = .clamp
+        material.diffuse.wrapT = .clamp
+        material.multiply.contents = color
+        material.blendMode = .add
+        material.isDoubleSided = true
+        material.writesToDepthBuffer = false
+        material.readsFromDepthBuffer = true
         geometry.materials = [material]
         return geometry
     }

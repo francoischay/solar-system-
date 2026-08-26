@@ -114,6 +114,34 @@ enum ProceduralTexture {
     }
 
     /// Pastille lumineuse pour les constellations : dégradé radial, pas de modèle 3D
+    /// Panache de moteur : u = le long de la traînée (transparent au pas de tir,
+    /// vif sous la fusée), v = travers du ruban (bords fondus).
+    static func flameSprite() -> UIImage {
+        let w = 128, h = 32
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        for y in 0..<h {
+            let v = (Double(y) + 0.5) / Double(h)
+            let across = pow(max(0, 1 - abs(2 * v - 1)), 1.7)
+            for x in 0..<w {
+                let u = (Double(x) + 0.5) / Double(w)
+                let alpha = pow(u, 1.6) * across
+                // prémultiplié : blanc pur, la teinte vient du `multiply` du matériau
+                let value = UInt8(max(0, min(255, alpha * 255)))
+                let i = (y * w + x) * 4
+                pixels[i] = value; pixels[i + 1] = value; pixels[i + 2] = value; pixels[i + 3] = value
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let cg = CGImage(
+                width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
+              )
+        else { return UIImage() }
+        return UIImage(cgImage: cg)
+    }
+
     static func dotSprite() -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: {
             let f = UIGraphicsImageRendererFormat()

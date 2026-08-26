@@ -120,12 +120,17 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     var day = Astro.todayDay
     var az = 0.65, elev = 0.58, roll = 0.0, dist = 230.0, goalDist = 230.0
     var goalAz: Double?, goalElev: Double?, goalRoll: Double?
+    private var zoomWaitsForLevel = false
     var panVelocityAz = 0.0, panVelocityElev = 0.0
     var dragging = false
     private var activeOrientationGestures = 0
-    // Même plafond que le prototype HTML (1.35 rad ≈ 77°) : s'approcher du pôle
-    // transforme tout déplacement horizontal en rotation de la vue sur elle-même.
-    private static let cameraElevationLimit = 1.35
+    // Presque le pôle (89,5°) : la vue zénithale reste accessible, sans jamais
+    // rendre l'axe de visée parallèle au vecteur « haut » (look-at dégénéré).
+    private static let cameraElevationLimit = 1.562
+    // Zoom sur un objet : au-delà de ~57° d'élévation le pôle nord glisse vers le
+    // centre du cadre. On redresse d'abord à l'inclinaison de la vue par défaut.
+    private static let uprightElevation = 0.58
+    private static let uprightElevationThreshold = 1.0
     var target = SIMD3<Double>(), focusTarget = SIMD3<Double>()
     private var targetVelocity = SIMD3<Double>()
     private var previousFocusTarget = SIMD3<Double>()
@@ -169,8 +174,19 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private let launchArcGlow = SCNNode()
     private let launchHead = SCNNode()
     private var launchClock = 0.0
+    /// Dézoom sur la Terre, changement de date, rotation vers le pas de tir,
+    /// plongée, puis seulement la mise à feu : chaque étape attend la précédente.
+    private enum LaunchPhase { case pullBack, aim, dive, flight }
+    private var launchPhase = LaunchPhase.pullBack
+    private var launchAimAz = 0.0, launchAimElev = 0.0
     private var launchProgressShown = -1.0
-    static let LAUNCH_DIVE = -0.7
+    private var launchCoreColor = UIColor.white
+    private var launchTrailColor = UIColor.white
+    private var launchTrailCamera = SIMD3<Double>()
+    private lazy var flameTexture = ProceduralTexture.flameSprite()
+    /// Demi-largeur du panache sous la fusée : plus étroit que la tête (rayon 0,012)
+    private static let LAUNCH_TRAIL_WIDTH = 0.009
+    static let LAUNCH_PULLBACK = 10.0, LAUNCH_DIVE_DIST = 4.2
 
     // Satellites
     let satelliteOrbits = SCNNode()
@@ -204,6 +220,8 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     @Published var handleTopPercent = 50.0
     @Published var satelliteNote = "Chargement des éléments orbitaux…"
     @Published var exploreView: ExploreView = .none
+    /// Onglet à rouvrir : on retrouve la section d'où vient la sélection
+    private(set) var lastExploreSection: ExploreView = .missions
     @Published var showAllMissions = false
     @Published var showAllSatellites = false
     @Published var labels: [LabelInfo] = []
@@ -647,10 +665,41 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         }
         selectionDetail = selection.flatMap { infoText[$0.name] }
         selectionIsSpacecraft = { if case .mission = selection { return true }; return false }()
-        hasSelection = selection != nil
         switch selection {
-        case .moon: goalDist = 14
-        case .satellite(let s): goalDist = s.frameDist > 0 && s.isConstellation ? s.frameDist : 5
+        case .mission: lastExploreSection = .missions
+        case .satellite: lastExploreSection = .satellites
+        default: break
+        }
+        hasSelection = selection != nil
+        // On remet d'abord l'horizon à plat (pôle nord en haut) : la boucle de
+        // rendu ne lance le rapprochement qu'une fois le roulis revenu à zéro.
+        if selection != nil {
+            // L'azimut est conservé : c'est lui qui cadre le bon côté de l'astre.
+            if abs(elev) > Self.uprightElevationThreshold {
+                goalElev = elev < 0 ? -Self.uprightElevation : Self.uprightElevation
+                elevGoalVelocity = 0
+            }
+            goalRoll = uprightRoll(
+                azimuth: goalAz ?? az, elevation: goalElev ?? elev,
+                axis: selectionAxis(selection)
+            )
+            zoomWaitsForLevel = true
+        }
+        switch selection {
+        // La caméra pivote autour de l'astre : on recule assez pour que la lune
+        // ou le satellite reste dans le cadre tout au long de son orbite.
+        case .moon(let m): goalDist = min(60, max(9, frameDistance(radius: m.spec.radius, margin: 1.08)))
+        case .satellite(let s):
+            if s.isConstellation, s.frameDist > 0 {
+                goalDist = s.frameDist
+            } else {
+                // Rayon de l'orbite dans la scène, borné au voisinage terrestre :
+                // le nœud du satellite peut encore être à sa position de la veille.
+                let orbit = satellitePosition(s, day: propagationDay()).map(simd_length)
+                    ?? Astro.orbitSceneRadius(km: Astro.EARTH_KM + (s.altitudeKm ?? 400))
+                let radius = min(4, max(Astro.EARTH_RADIUS, orbit))
+                goalDist = max(5, frameDistance(radius: radius, margin: 1.15))
+            }
         case .mission: goalDist = 34
         case .planet: goalDist = 42
         case nil: break
@@ -672,6 +721,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     // MARK: Explorer
 
     func setExploreView(_ view: ExploreView) {
+        if view != .none { lastExploreSection = view }
         exploreView = view
         if view == .satellites {
             setSelected(.planet(earth))
@@ -714,9 +764,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         // se placer du côté du satellite, sinon il se retrouve derrière la Terre
         if !model.isConstellation, let offset = satellitePosition(model, day: propagationDay()), simd_length_squared(offset) > 0 {
             let elevGoal = min(1.25, max(0.12, asin(offset.y / simd_length(offset)) + 0.12))
-            aimCamera(atan2(offset.x, offset.z) + 0.3, elevGoal)
+            aimUpright(atan2(offset.x, offset.z) + 0.3, elevGoal)
         } else {
-            aimCamera(1.05, 0.32)
+            aimUpright(1.05, 0.32)
         }
         exploreView = .none
     }
@@ -743,15 +793,22 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         }
         buildLaunchArc(points: points, color: uiColor(launch.color))
         exploreView = .none
-        launchClock = -1.6 // recul, changement de date, plongée, puis mise à feu
+        lastExploreSection = .launches
+        launchClock = 0
+        launchPhase = .pullBack
         launchProgressShown = -1
         let targetDay = Astro.day(from: launch.date)
         animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
         // Le globe aura tourné d'ici la date de tir : on vise son orientation d'arrivée
         let arrival = earthTilt * simd_quatd(angle: Astro.gmst(targetDay), axis: SIMD3(0, 1, 0))
         let heading = arrival.act(normal)
-        aimCamera(atan2(heading.x, heading.z) + 0.85, 0.28)
-        goalDist = 10 // on prend du recul le temps que la date défile
+        // La caméra pivote autour du centre du globe : on la placera presque en
+        // face du pas de tir (léger décalage pour garder l'ascension oblique),
+        // sinon le site part derrière le limbe. La rotation n'a lieu qu'une fois
+        // le dézoom et le changement de date terminés (phase `aim`).
+        launchAimAz = atan2(heading.x, heading.z) + 0.3
+        launchAimElev = max(-1.1, min(1.1, asin(max(-1, min(1, heading.y)))))
+        goalDist = Self.LAUNCH_PULLBACK // on prend du recul le temps que la date défile
         launchListVersion += 1
     }
 
@@ -761,15 +818,37 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         for i in 1..<points.count {
             launchArcLengths.append(launchArcLengths[i - 1] + simd_length(points[i] - points[i - 1]))
         }
-        var white = CGFloat(0), r = CGFloat(0), g = CGFloat(0), b = CGFloat(0), a = CGFloat(0)
+        var r = CGFloat(0), g = CGFloat(0), b = CGFloat(0), a = CGFloat(0)
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
-        white = 0.55
-        let core = UIColor(red: r + (1 - r) * white, green: g + (1 - g) * white, blue: b + (1 - b) * white, alpha: 1)
-        launchArcCore.geometry = Geo.lineGeometry(points: points, color: core)
-        launchArcGlow.geometry = Geo.lineGeometry(points: points, color: color, additive: true)
-        launchArcGlow.opacity = 0.5
-        if let headMaterial = launchHead.geometry?.materials.first { headMaterial.diffuse.contents = core }
+        let white = 0.55
+        launchCoreColor = UIColor(red: r + (1 - r) * white, green: g + (1 - g) * white, blue: b + (1 - b) * white, alpha: 1)
+        launchTrailColor = color
+        // Rien n'est dessiné avant la mise à feu : la trajectoire se trace
+        // derrière la fusée, elle n'est jamais montrée puis effacée.
+        launchArcCore.geometry = nil
+        launchArcGlow.geometry = nil
+        launchArcCore.isHidden = true
+        launchArcGlow.isHidden = true
+        launchArcGlow.opacity = 1
+        launchTrailCamera = SIMD3()
+        if let headMaterial = launchHead.geometry?.materials.first { headMaterial.diffuse.contents = launchCoreColor }
         if let haloMaterial = launchHead.childNodes.first?.geometry?.materials.first { haloMaterial.diffuse.contents = color }
+    }
+
+    /// Traînée visible : les points parcourus, terminés exactement sous la tête.
+    /// Même paramétrage que `launchArcPoint(at:)`, donc aucun décalage entre la
+    /// fusée et sa traînée.
+    private func launchArcVisiblePoints(upTo progress: Double) -> [SIMD3<Double>] {
+        guard let total = launchArcLengths.last, total > 0, launchArcPoints.count >= 2 else { return [] }
+        let goal = max(0, min(1, progress)) * total
+        var points = [launchArcPoints[0]]
+        var i = 1
+        while i < launchArcPoints.count, launchArcLengths[i] < goal {
+            points.append(launchArcPoints[i])
+            i += 1
+        }
+        points.append(launchArcPoint(at: progress))
+        return points
     }
 
     private func launchArcPoint(at progress: Double) -> SIMD3<Double> {
@@ -822,6 +901,36 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         return SIMD3(x, y, z)
     }
 
+    /// Axe de rotation de l'astre visé, en coordonnées de scène. Seule la Terre
+    /// est inclinée (23,44°) ; ailleurs l'axe est déjà la verticale du monde.
+    private func selectionAxis(_ selection: Selection?) -> SIMD3<Double> {
+        switch selection {
+        case .planet(let p) where p === earth: return earthTilt.act(SIMD3(0, 1, 0))
+        case .moon(let m) where m.planet === earth: return earthTilt.act(SIMD3(0, 1, 0))
+        case .satellite: return earthTilt.act(SIMD3(0, 1, 0))
+        default: return SIMD3(0, 1, 0)
+        }
+    }
+
+    /// Roulis qui remet cet axe à la verticale de l'écran : pôle nord en haut,
+    /// quelle que soit la position de la caméra autour de l'astre.
+    private func uprightRoll(azimuth: Double, elevation: Double, axis: SIMD3<Double>) -> Double {
+        let offset = SIMD3(sin(azimuth) * cos(elevation), sin(elevation), cos(azimuth) * cos(elevation))
+        let forward = -simd_normalize(offset)
+        let right = simd_cross(forward, SIMD3(0.0, 1.0, 0.0))
+        guard simd_length_squared(right) > 1e-9 else { return 0 }
+        let unitRight = simd_normalize(right)
+        let up = simd_cross(unitRight, forward)
+        let a = simd_normalize(axis)
+        return atan2(simd_dot(a, unitRight), simd_dot(a, up))
+    }
+
+    /// Visée + redressement : l'astre arrive cadré, pôle nord en haut.
+    func aimUpright(_ targetAz: Double, _ targetElev: Double) {
+        aimCamera(targetAz, targetElev)
+        goalRoll = uprightRoll(azimuth: targetAz, elevation: targetElev, axis: selectionAxis(selected))
+    }
+
     func aimCamera(_ targetAz: Double, _ targetElev: Double, resetRoll: Bool = false) {
         goalAz = targetAz
         goalElev = targetElev
@@ -839,6 +948,18 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         let clamped = max(0, min(1, progress))
         detailExpansionTarget = clamped
         if immediate { detailExpansionProgress = clamped }
+    }
+
+    /// Recul nécessaire pour qu'un disque de rayon `radius` centré à l'écran
+    /// tienne dans le cadre, portrait compris.
+    func frameDistance(radius: Double, margin: Double = 1.1) -> Double {
+        // Portrait : c'est la largeur qui contraint, d'où l'aspect réel (et non
+        // un plancher à 0,55 qui laissait la lune déborder sur le côté).
+        let aspect = Double(scnView.map { $0.bounds.width / max(1, $0.bounds.height) } ?? 1)
+        let halfFov = 46.0 / 2 * Astro.DEG
+        let vertical = radius / tan(halfFov)
+        let horizontal = vertical / max(0.42, aspect)
+        return max(vertical, horizontal) * margin
     }
 
     func placeCamera() {
@@ -894,7 +1015,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         activeOrientationGestures = max(0, activeOrientationGestures - 1)
         dragging = activeOrientationGestures > 0
         if allowsInertia, activeOrientationGestures == 0 {
-            panVelocityAz = max(-1.8, min(1.8, -velocityX * 0.007))
+            // Près du pôle, une rotation d'azimut fait tourner la vue sur
+            // elle-même : on éteint l'inertie horizontale à mesure qu'on monte,
+            // sinon un flick vu de dessus part en toupie.
+            let horizonFactor = max(0, cos(elev))
+            panVelocityAz = max(-1.8, min(1.8, -velocityX * 0.007)) * horizonFactor
             panVelocityElev = max(-1.35, min(1.35, velocityY * 0.005))
         } else {
             panVelocityAz = 0
@@ -935,6 +1060,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private var pinchStartZoom = 230.0
     private var pinchStartScale = 1.0
     func pinchBegan() {
+        zoomWaitsForLevel = false // un zoom au doigt répond tout de suite
         pinchStartZoom = goalDist
         pinchStartScale = spacecraftZoomScale
         panVelocityAz = 0
@@ -999,11 +1125,25 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         let best = candidates.sorted { a, b in
             a.priority != b.priority ? a.priority < b.priority : a.distance < b.distance
         }.first
-        if let best {
+        if selectedLaunch != nil {
+            // Sortir d'un lancement remonte d'un cran, comme pour un satellite :
+            // on retrouve la Terre, pas le système solaire.
+            dismissLaunch(selecting: best?.selection ?? .planet(earth))
+        } else if let best {
             if best.selection != selected { setSelected(best.selection) }
-        } else if selected != nil || selectedLaunch != nil {
+        } else if selected != nil {
             reset()
         }
+    }
+
+    /// Referme la trajectoire de lancement et rend la main à l'astre.
+    func dismissLaunch(selecting selection: Selection) {
+        selectedLaunch = nil
+        launchArcCore.isHidden = true
+        launchArcGlow.isHidden = true
+        launchHead.isHidden = true
+        launchListVersion += 1
+        setSelected(selection)
     }
 
     // Cartouche : bascule début/fin de mission pour une sonde sélectionnée
@@ -1320,22 +1460,51 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
         // Lancement : une seule ascension, puis la trajectoire reste affichée
         if selectedLaunch != nil, !launchArcPoints.isEmpty {
-            launchClock += dt
-            goalDist = launchClock < Self.LAUNCH_DIVE ? 10 : 1.5 // recul puis plongée
+            switch launchPhase {
+            case .pullBack:
+                goalDist = Self.LAUNCH_PULLBACK
+                // Dézoom fini et date arrivée : on peut tourner vers le pas de tir
+                if dateTransition == nil, !zoomWaitsForLevel, abs(dist - goalDist) < 0.08 * goalDist {
+                    aimUpright(launchAimAz, launchAimElev)
+                    launchPhase = .aim
+                }
+            case .aim:
+                goalDist = Self.LAUNCH_PULLBACK
+                if goalAz == nil, goalElev == nil, goalRoll == nil { launchPhase = .dive }
+            case .dive:
+                goalDist = Self.LAUNCH_DIVE_DIST
+                if abs(dist - goalDist) < 0.05 * goalDist { launchPhase = .flight }
+            case .flight:
+                goalDist = Self.LAUNCH_DIVE_DIST
+                launchClock += dt // mise à feu : la caméra est en place
+            }
             let rise = 3.4
             let progress = min(1, max(0, launchClock) / rise)
-            if progress != launchProgressShown {
+            // Le panache est un ruban tourné vers l'œil : il se reconstruit à
+            // l'avancée de la fusée, et quand la caméra a bougé.
+            let eye = earth.node.convertPosition(cameraNode.position, from: nil).simd3
+            if progress != launchProgressShown || simd_length(eye - launchTrailCamera) > 0.02 {
                 launchProgressShown = progress
-                let count = max(2, Int(Double(launchArcPoints.count) * progress))
-                let visiblePoints = Array(launchArcPoints.prefix(count))
-                if let core = Geo.lineGeometry(points: visiblePoints, color: (launchArcCore.geometry?.materials.first?.diffuse.contents as? UIColor) ?? .white) {
-                    launchArcCore.geometry = core
+                launchTrailCamera = eye
+                let trail = progress > 0.001 ? launchArcVisiblePoints(upTo: progress) : []
+                if trail.count >= 2 {
+                    let widths = (0..<trail.count).map { i -> Double in
+                        // Le feu s'évase sous la fusée et s'éteint vers le pas de tir
+                        Self.LAUNCH_TRAIL_WIDTH * (0.28 + 0.72 * Double(i) / Double(trail.count - 1))
+                    }
+                    launchArcGlow.geometry = Geo.ribbonGeometry(
+                        points: trail, halfWidths: widths, viewPoint: eye,
+                        color: launchTrailColor, texture: flameTexture
+                    )
+                    launchArcCore.geometry = Geo.lineGeometry(
+                        points: trail, color: launchCoreColor, additive: true, texture: flameTexture
+                    )
+                    launchArcCore.isHidden = false
+                    launchArcGlow.isHidden = false
+                } else {
+                    launchArcCore.isHidden = true
+                    launchArcGlow.isHidden = true
                 }
-                if let glow = Geo.lineGeometry(points: visiblePoints, color: (launchArcGlow.geometry?.materials.first?.diffuse.contents as? UIColor) ?? .white, additive: true) {
-                    launchArcGlow.geometry = glow
-                }
-                launchArcCore.isHidden = false
-                launchArcGlow.isHidden = false
             }
             launchHead.isHidden = progress <= 0.004
             if !launchHead.isHidden {
@@ -1396,28 +1565,23 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         if case .mission(let mission) = selected, !mission.node.isHidden, mission.trailRadius > 0 {
             focusTarget = mission.trailCenter // on cadre la trajectoire parcourue
             focusIdentity = .selection(.mission(mission))
-            let aspect = Double(scnView.map { $0.bounds.width / max(1, $0.bounds.height) } ?? 1)
-            let halfFov = 46.0 / 2 * Astro.DEG
-            let verticalDistance = mission.trailRadius / tan(halfFov)
-            let horizontalDistance = verticalDistance / max(0.55, aspect)
-            goalDist = min(560, max(3, max(verticalDistance, horizontalDistance) * 1.25 * spacecraftZoomScale))
+            goalDist = min(560, max(3, frameDistance(radius: mission.trailRadius) * spacecraftZoomScale))
         } else if case .mission = selected {
             focusTarget = SIMD3()
             goalDist = 230
         } else if let launch = selectedLaunch, !launchArcPoints.isEmpty {
-            if launchClock < Self.LAUNCH_DIVE {
-                focusTarget = earth.node.position.simd3
-            } else {
-                let local = launchArcPoint(at: 0.45)
-                focusTarget = earth.node.convertPosition(SCNVector3(local), to: nil).simd3
-            }
+            // Le pivot reste le centre du globe, même pendant la plongée : la
+            // rotation tourne autour de la Terre, pas autour du pas de tir.
+            focusTarget = earth.node.position.simd3
             focusIdentity = .launch(launch.id)
         } else if let selection = selected {
             switch selection {
             case .planet(let p): focusTarget = p.node.position.simd3
-            case .moon(let m): focusTarget = m.node.worldPosition.simd3
+            // Lune et satellite : on vise leur astre pour que la caméra tourne
+            // autour de lui, l'objet décrivant son orbite dans le cadre.
+            case .moon(let m): focusTarget = m.planet.node.position.simd3
             case .mission(let m): focusTarget = m.node.position.simd3
-            case .satellite(let s): focusTarget = s.node.position.simd3
+            case .satellite: focusTarget = earth.node.position.simd3
             }
             focusIdentity = .selection(selection)
         } else {
@@ -1437,10 +1601,15 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             target, toward: focusTarget, velocity: &targetVelocity,
             smoothTime: focusIdentity == nil ? 0.58 : 0.42, deltaTime: dt
         )
-        dist = smoothDamp(
-            dist, toward: goalDist, velocity: &distVelocity,
-            smoothTime: 0.5, deltaTime: dt
-        )
+        if zoomWaitsForLevel, goalRoll != nil || goalElev != nil {
+            distVelocity = 0 // le zoom attend que la scène soit redressée
+        } else {
+            zoomWaitsForLevel = false
+            dist = smoothDamp(
+                dist, toward: goalDist, velocity: &distVelocity,
+                smoothTime: 0.5, deltaTime: dt
+            )
+        }
         placeCamera()
 
         updateDateText()
