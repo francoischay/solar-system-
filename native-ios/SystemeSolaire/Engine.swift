@@ -806,8 +806,15 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         // face du pas de tir (léger décalage pour garder l'ascension oblique),
         // sinon le site part derrière le limbe. La rotation n'a lieu qu'une fois
         // le dézoom et le changement de date terminés (phase `aim`).
-        launchAimAz = atan2(heading.x, heading.z) + 0.3
-        launchAimElev = max(-1.1, min(1.1, asin(max(-1, min(1, heading.y)))))
+        // Vue franchement oblique : face au pas de tir, l'ascension se ferait vers
+        // l'œil et la courbe s'écraserait sur le sol. On décale d'environ 30° en
+        // azimut et autant en hauteur pour voir la trajectoire se dérouler.
+        let siteElevation = asin(max(-1, min(1, heading.y)))
+        // Caméra un cran sous le pas de tir : le site remonte dans la moitié haute
+        // du cadre et la fusée s'élève vers le haut de l'écran au lieu de venir
+        // vers l'œil. ~29° d'écart au total, la courbe est lisible sans coller au limbe.
+        launchAimAz = atan2(heading.x, heading.z) + 0.42
+        launchAimElev = max(-1.1, min(1.1, siteElevation - 0.38))
         goalDist = Self.LAUNCH_PULLBACK // on prend du recul le temps que la date défile
         launchListVersion += 1
     }
