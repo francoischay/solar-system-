@@ -39,4 +39,17 @@ L'app n'expose ni console ni poignée d'état : pas de moyen de lire l'état int
 
 ## Résultats à ce jour
 
-Aucune passe n'a encore été déroulée.
+**Passe outillée du 26 août 2026**, sur simulateur iPhone 17 Pro (iOS), app fraîchement installée, localisation refusée, réseau actif, contre le commit `bb3744e`. Menée par un agent pilotant le simulateur (captures d'écran, taps, glissements, pincements à deux doigts), pas par un testeur humain.
+
+19 items sur 61 ont été joués. **16 passent, 3 échouent** — les trois échecs sont des défauts déjà soupçonnés, désormais confirmés : [B-01](../bug-triage.md#b-01--sélectionner-un-satellite-pas-encore-lancé-cadre-le-vide-le-soleil) (SATL-04), [B-02](../bug-triage.md#b-02--le-pincement-est-inopérant-tant-quun-lancement-est-sélectionné) (TIR-02) et [B-07](../bug-triage.md#b-07--gps-entier-daté-du-premier-tle--constellation-absente-avant-2018) (SATL-08). Un défaut supplémentaire a été découvert en cours de passe et consigné en [B-15](../bug-triage.md#b-15--la-note-de-fraîcheur-des-tle-est-sous-la-ligne-de-flottaison).
+
+Ce que cette passe **n'a pas** couvert, et pourquoi :
+
+- **Tout ce qui relève du ressenti** : élan et amortissements (ORBIT-02, ORBIT-03, GLIS-03), durées et timings (ECHE-08, TEMP-05), fluidité. Un agent compare des captures ; il ne ressent pas une inertie.
+- **Tout le multi-touch réel** : les items COMPO-04 et COMPO-08, l'annulation système du toucher, les gestes à deux mains (GLIS-09, GLIS-10). Le pincement synthétique fonctionne (il a servi à confirmer B-02), mais poser un deuxième doigt *en plein glissement* ne se simule pas fidèlement.
+- **Les conditions hors ligne** (DATA-01, DATA-02, DATA-05, SATL-08 en version hors ligne) : la passe s'est faite réseau actif.
+- **Les valeurs internes** : aucun angle, aucune vitesse, aucune distance n'a été lu — seulement ce que l'écran montre.
+
+**Aucun document n'est passé en `verified`** : une passe outillée ne suffit pas, et la plupart des items P1 restants exigent un appareil réel et un testeur humain.
+
+Observation à recouper, pas encore consignée en défaut : les effectifs affichés étaient « GPS · 1 satellite » et « Starlink · 30 satellites » — soit exactement le contenu des TLE embarqués. L'app tournait donc sur son repli malgré un réseau actif (les lancements, eux, venaient bien de l'API). Reste à savoir si Celestrak avait refusé la requête ce jour-là ou si le chargement échoue systématiquement ; à rejouer avant d'en faire une entrée de triage.

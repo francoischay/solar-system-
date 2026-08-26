@@ -1,10 +1,10 @@
 # Bug triage
 
-La liste consolidée des défauts et incohérences que les documents de fonctionnalité ont relevés dans leurs sections « Questions ouvertes et vérification » et dans leurs corps. Chaque entrée est lue depuis le code (`native-ios/SystemeSolaire/`, état `bb3744e`) ; aucune n'a encore été confirmée sur l'app qui tourne — les items de `verification/` marqués « défaut soupçonné » servent à cela. La liste existe pour que l'équipe produit décide, entrée par entrée : corriger, documenter comme voulu, ou laisser.
+La liste consolidée des défauts et incohérences que les documents de fonctionnalité ont relevés dans leurs sections « Questions ouvertes et vérification » et dans leurs corps. Chaque entrée est lue depuis le code (`native-ios/SystemeSolaire/`, état `bb3744e`) ; les **trois** qui portent une ligne **Status** ont été confirmées sur l'app qui tourne lors de la passe outillée du 26 août 2026 (voir [verification/README.md](verification/README.md#résultats-à-ce-jour)). La liste existe pour que l'équipe produit décide, entrée par entrée : corriger, documenter comme voulu, ou laisser.
 
 ## Résumé
 
-Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause racine il en reste 14 : 2 hautes, 7 moyennes, 5 basses. Les deux grands foyers sont **l'élan de la timeline** (trois défauts dans la même poignée de lignes de `Engine.swift`) et **l'état « lancement sélectionné »**, qui garde la main sur la caméra plus longtemps et plus fort que l'utilisateur ne s'y attend. Un troisième foyer, plus diffus : des **valeurs figées au chargement** (année de lancement des constellations, effectif des nuages, liste des lancements) qui vieillissent sans se rafraîchir.
+Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause racine il en reste 15 : 2 hautes, 7 moyennes, 6 basses ; 4 sont confirmées sur l'app. Les deux grands foyers sont **l'élan de la timeline** (trois défauts dans la même poignée de lignes de `Engine.swift`) et **l'état « lancement sélectionné »**, qui garde la main sur la caméra plus longtemps et plus fort que l'utilisateur ne s'y attend. Un troisième foyer, plus diffus : des **valeurs figées au chargement** (année de lancement des constellations, effectif des nuages, liste des lancements) qui vieillissent sans se rafraîchir.
 
 | ID | Titre | Gravité | Zone | Décision | Issue |
 | --- | --- | --- | --- | --- | --- |
@@ -21,6 +21,7 @@ Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause 
 | B-11 | Le menu d'échelle peut rester ouvert sans moyen évident de le fermer | low | timeline | fix | — |
 | B-12 | Une transition de date peut se battre avec le doigt sur la poignée | low | timeline | fix | — |
 | B-13 | Pincer une sonde sélectionnée invisible règle un cadrage à l'aveugle | low | camera | fix | — |
+| B-15 | La note de fraîcheur des TLE est sous la ligne de flottaison | low | explorer | fix | — |
 | B-14 | Petites bizarreries assumables (repli des lancements, `status` inutilisé, re-tap d'onglet) | low | divers | product call | — |
 
 ## High
@@ -34,6 +35,7 @@ Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause 
 - **Gravité :** `high` — l'utilisateur se retrouve plaqué contre le Soleil sans comprendre, à l'opposé de ce qu'il a demandé.
 - **Décision :** `fix` — refuser la sélection d'un engin non né (comme la scène le fait déjà pour le tap), ou rabattre sur la Terre.
 - **Raised by :** [explorer/satellites.md](explorer/satellites.md#questions-ouvertes-et-vérification).
+- **Status :** confirmé le 26 août 2026 sur simulateur iPhone 17 Pro (item SATL-04), et pire que prévu : l'écran se remplit entièrement de la texture du Soleil, sans repère ni horizon. Le cartouche affiche « Tiangong — lancé en 2021 ». Seule issue trouvée : un tap dans le vide (vérifié, item TOUCH-02).
 
 ### B-02 : Le pincement est inopérant tant qu'un lancement est sélectionné
 
@@ -44,6 +46,7 @@ Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause 
 - **Gravité :** `high` — un geste central du produit est silencieusement sans effet dans un état où l'on reste longtemps.
 - **Décision :** `fix` — ne forcer la distance que pendant la séquence (jusqu'à la fin de l'ascension), puis rendre la main au pincement.
 - **Raised by :** [explorer/lancements.md](explorer/lancements.md#questions-ouvertes-et-vérification), [camera/geste-compose.md](camera/geste-compose.md#questions-ouvertes-et-vérification).
+- **Status :** confirmé le 26 août 2026 (item TIR-02) : après la séquence de tir de « Starlink Group 15-22 », un pincement à deux doigts pour reculer laisse l'image strictement inchangée, au pixel près.
 
 ## Medium
 
@@ -96,6 +99,7 @@ Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause 
 - **Gravité :** `medium` — donnée fausse affichée, constellation entière escamotée à tort.
 - **Décision :** `fix` — pour une constellation, prendre l'année du membre le plus ancien (ou ne pas appliquer de naissance au modèle entier).
 - **Raised by :** [explorer/satellites.md](explorer/satellites.md#questions-ouvertes-et-vérification).
+- **Status :** confirmé le 26 août 2026 (item SATL-08), **réseau actif** — le défaut ne tient donc pas au seul mode hors ligne : à mai 1940, la ligne GPS affiche « lancé en 2018 » et Starlink « lancé en 2019 ».
 
 ### B-08 : L'effectif affiché d'une constellation masquée est figé sur une autre date
 
@@ -158,6 +162,17 @@ Les documents ont soulevé une vingtaine de soupçons ; après fusion par cause 
 - **Gravité :** `low` — chemin rare, conséquence bénigne.
 - **Décision :** `fix` — conditionner l'exception à la visibilité de la sonde.
 - **Raised by :** [camera/geste-compose.md](camera/geste-compose.md#questions-ouvertes-et-vérification).
+
+### B-15 : La note de fraîcheur des TLE est sous la ligne de flottaison
+
+- **Où l'utilisateur le rencontre :** onglet Satellites ouvert : la note (« Propagation SGP4 · TLE du 23 août 2026 » / « Positions indicatives · … ») n'est pas visible tant qu'on n'a pas fait défiler la liste vers le bas.
+- **Ce qui se passe / ce qui était attendu :** la zone de liste est plafonnée à 360 points et son contenu est plus haut ; la note, placée en dernier, est clippée au repos. C'est le **seul** endroit de l'app qui dit d'où viennent les positions et si elles sont encore fiables — le garde-fou le plus important du produit est celui qu'on ne voit pas.
+- **Reproduire :** panneau Explorer → Satellites → lire le bas du panneau sans faire défiler : la bascule est la dernière chose visible. Faire défiler d'une centaine de points : la note apparaît. Item [SATL-05](verification/explorer.md).
+- **Pourquoi (dans le code) :** `ExplorerPanel.swift` — la note est le dernier enfant du `VStack` de `SatelliteList`, à l'intérieur du `ScrollView` borné par `frame(maxHeight: 360)`.
+- **Gravité :** `low` — l'information existe et reste accessible.
+- **Décision :** `fix` — sortir la note du défilement et la fixer sous le panneau, comme la mention « Fenêtres indicatives » de l'onglet Lancements (qui, elle, souffre du même clipping).
+- **Raised by :** [explorer/satellites.md](explorer/satellites.md#la-note-du-bas-de-panneau) ; découvert pendant la passe du 26 août 2026.
+- **Status :** confirmé le 26 août 2026 (item SATL-05).
 
 ### B-14 : Petites bizarreries assumables
 
