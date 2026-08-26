@@ -136,7 +136,7 @@ Le statut est `not started`, `drafted` ou `verified`.
 | Document | Statut |
 | --- | --- |
 | glossary.md | drafted |
-| bug-triage.md | not started |
+| bug-triage.md | drafted |
 | verification/ (4 checklists) | drafted |
 | foundations/gestes-et-camera.md | drafted |
 | foundations/temps-et-timeline.md | drafted |
