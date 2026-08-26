@@ -174,10 +174,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private let launchArcGlow = SCNNode()
     private let launchHead = SCNNode()
     private var launchClock = 0.0
-    /// Dézoom sur la Terre, changement de date, rotation vers le pas de tir,
-    /// plongée, puis seulement la mise à feu : chaque étape attend la précédente.
-    private enum LaunchPhase { case pullBack, aim, dive, flight }
-    private var launchPhase = LaunchPhase.pullBack
+    /// Recul, visée et défilement de la date menés ensemble (`arc`), plongée qui
+    /// reprend le dézoom en route, puis la mise à feu une fois la caméra en place.
+    private enum LaunchPhase { case arc, dive, flight }
+    private var launchPhase = LaunchPhase.arc
+    private var launchMoonPush = 0.0, launchMoonPushVelocity = 0.0
     private var launchAimAz = 0.0, launchAimElev = 0.0
     private var launchProgressShown = -1.0
     private var launchCoreColor = UIColor.white
@@ -186,7 +187,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private lazy var flameTexture = ProceduralTexture.flameSprite()
     /// Demi-largeur du panache sous la fusée : plus étroit que la tête (rayon 0,012)
     private static let LAUNCH_TRAIL_WIDTH = 0.009
+    // La plongée s'arrête à 4,2, au-delà de l'orbite de la Lune (3,1) : plus près
+    // le champ horizontal (22° en portrait) ne tient plus l'écart oblique du
+    // cadrage, le pas de tir sort par le bord. C'est donc la Lune qui s'écarte.
     static let LAUNCH_PULLBACK = 10.0, LAUNCH_DIVE_DIST = 4.2
+    /// Rayon d'orbite de la Lune pendant un lancement : au-delà de la caméra
+    /// (4,2) plus son propre rayon, elle ne peut plus passer devant le pas de tir.
+    static let LAUNCH_MOON_RADIUS = 7.0
+    /// Écart de visée sous lequel la plongée démarre sans attendre la fin du
+    /// pivot : les deux mouvements se recouvrent au lieu de s'enchaîner.
+    static let LAUNCH_AIM_HANDOFF = 0.25 // ~14°
 
     // Satellites
     let satelliteOrbits = SCNNode()
@@ -795,28 +805,43 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         exploreView = .none
         lastExploreSection = .launches
         launchClock = 0
-        launchPhase = .pullBack
+        launchPhase = .arc
         launchProgressShown = -1
         let targetDay = Astro.day(from: launch.date)
         animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
         // Le globe aura tourné d'ici la date de tir : on vise son orientation d'arrivée
         let arrival = earthTilt * simd_quatd(angle: Astro.gmst(targetDay), axis: SIMD3(0, 1, 0))
         let heading = arrival.act(normal)
-        // La caméra pivote autour du centre du globe : on la placera presque en
-        // face du pas de tir (léger décalage pour garder l'ascension oblique),
-        // sinon le site part derrière le limbe. La rotation n'a lieu qu'une fois
-        // le dézoom et le changement de date terminés (phase `aim`).
-        // Vue franchement oblique : face au pas de tir, l'ascension se ferait vers
-        // l'œil et la courbe s'écraserait sur le sol. On décale d'environ 30° en
-        // azimut et autant en hauteur pour voir la trajectoire se dérouler.
+        // La caméra pivote autour du centre du globe : elle se place face au pas
+        // de tir, sinon le site part derrière le limbe. Mais franchement de face
+        // l'ascension se ferait vers l'œil et la courbe s'écraserait sur le sol,
+        // d'où le décalage oblique ci-dessous.
         let siteElevation = asin(max(-1, min(1, heading.y)))
         // Caméra un cran sous le pas de tir : le site remonte dans la moitié haute
         // du cadre et la fusée s'élève vers le haut de l'écran au lieu de venir
-        // vers l'œil. ~29° d'écart au total, la courbe est lisible sans coller au limbe.
-        launchAimAz = atan2(heading.x, heading.z) + 0.42
-        launchAimElev = max(-1.1, min(1.1, siteElevation - 0.38))
+        // vers l'œil. ~32° d'écart au total, la courbe se lit sans coller au limbe.
+        // L'écart est porté surtout par l'élévation : en portrait le cadre n'offre
+        // que ±11° en largeur contre ±23° en hauteur, et le mettre en azimut
+        // poussait le pas de tir contre le bord gauche.
+        launchAimAz = atan2(heading.x, heading.z) + 0.22
+        launchAimElev = max(-1.1, min(1.1, siteElevation - 0.52))
         goalDist = Self.LAUNCH_PULLBACK // on prend du recul le temps que la date défile
+        // Le pivot part en même temps que le recul : la caméra contourne le globe
+        // pendant qu'elle s'en éloigne, au lieu d'attendre le dézoom. La visée
+        // porte déjà le redressement, on lève donc le verrou qui gèle le zoom.
+        aimUpright(launchAimAz, launchAimElev)
+        zoomWaitsForLevel = false
         launchListVersion += 1
+    }
+
+    /// Plus grand écart angulaire restant sur la visée, tous axes confondus.
+    /// Vaut 0 quand le pivot est fini — il continue pendant la plongée.
+    private var launchAimResidual: Double {
+        var worst = 0.0
+        if let goal = goalAz { worst = max(worst, abs(atan2(sin(goal - az), cos(goal - az)))) }
+        if let goal = goalElev { worst = max(worst, abs(goal - elev)) }
+        if let goal = goalRoll { worst = max(worst, abs(atan2(sin(goal - roll), cos(goal - roll)))) }
+        return worst
     }
 
     private func buildLaunchArc(points: [SIMD3<Double>], color: UIColor) {
@@ -1442,14 +1467,23 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         }
 
         // Lunes
+        // Pendant un lancement la caméra finit à 4,2 du globe, au-delà de l'orbite
+        // lunaire : quand la Lune passe dans l'axe elle bouche le pas de tir de
+        // tout près. Elle s'écarte donc, en glissant, le temps de la séquence.
+        launchMoonPush = smoothDamp(
+            launchMoonPush, toward: selectedLaunch == nil ? 0 : 1,
+            velocity: &launchMoonPushVelocity, smoothTime: 0.9, deltaTime: dt
+        )
         for system in moonSystems {
             system.group.position = system.planet.node.position
             let parentSelected = selected == .planet(system.planet)
             let moonSelected = system.moons.contains { selected == .moon($0) }
             let visible = parentSelected || moonSelected
             system.group.isHidden = !visible
+            let push = system.planet === earth ? launchMoonPush : 0
             for moon in system.moons {
-                moon.node.position = SCNVector3(moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: moon.spec.radius, day: day))
+                let radius = moon.spec.radius + (Self.LAUNCH_MOON_RADIUS - moon.spec.radius) * push
+                moon.node.position = SCNVector3(moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: radius, day: day))
                 if visible, trailStrength > 0.006 {
                     let span = min(abs(moon.spec.period) * 0.85, 2 + trailEnergy * 0.1)
                     var points: [SIMD3<Double>] = []
@@ -1457,7 +1491,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                         let u = Double(k) / 71
                         let trailDay = day - trailDirection * span * u
                         let parent = planetPosition(system.planet.spec, day: trailDay)
-                        points.append(parent + moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: moon.spec.radius, day: trailDay))
+                        points.append(parent + moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: radius, day: trailDay))
                     }
                     moon.trail.update(points: points, opacity: trailStrength * 0.85)
                 } else {
@@ -1469,16 +1503,12 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         // Lancement : une seule ascension, puis la trajectoire reste affichée
         if selectedLaunch != nil, !launchArcPoints.isEmpty {
             switch launchPhase {
-            case .pullBack:
+            case .arc:
                 goalDist = Self.LAUNCH_PULLBACK
-                // Dézoom fini et date arrivée : on peut tourner vers le pas de tir
-                if dateTransition == nil, !zoomWaitsForLevel, abs(dist - goalDist) < 0.08 * goalDist {
-                    aimUpright(launchAimAz, launchAimElev)
-                    launchPhase = .aim
-                }
-            case .aim:
-                goalDist = Self.LAUNCH_PULLBACK
-                if goalAz == nil, goalElev == nil, goalRoll == nil { launchPhase = .dive }
+                // Recul, visée et défilement de la date courent ensemble. C'est
+                // le pivot qui commande la suite : dès qu'il ne reste qu'un filet
+                // d'écart, la plongée reprend le dézoom en cours de route.
+                if launchAimResidual < Self.LAUNCH_AIM_HANDOFF { launchPhase = .dive }
             case .dive:
                 goalDist = Self.LAUNCH_DIVE_DIST
                 if abs(dist - goalDist) < 0.05 * goalDist { launchPhase = .flight }
