@@ -922,7 +922,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         let unitRight = simd_normalize(right)
         let up = simd_cross(unitRight, forward)
         let a = simd_normalize(axis)
-        return atan2(simd_dot(a, unitRight), simd_dot(a, up))
+        // θ = angle de l'axe à l'écran, compté depuis la verticale vers la droite.
+        // Le roulis tourne l'image dans l'autre sens : on rend son opposé.
+        return -atan2(simd_dot(a, unitRight), simd_dot(a, up))
     }
 
     /// Visée + redressement : l'astre arrive cadré, pôle nord en haut.
@@ -968,28 +970,27 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             Float(target.y + sin(elev) * dist),
             Float(target.z + cos(az) * cos(elev) * dist)
         )
-        cameraNode.look(at: SCNVector3(target))
-        // `look(at:)` maintient l'horizon à plat. Le roulis ajouté dans le repère
-        // local de la caméra permet d'orienter le plan orbital dans tout l'écran.
+        // Le roulis est ajouté dans le repère local de la caméra, à partir d'une
+        // base recalculée du vecteur haut du monde. Sans ce `up:` explicite,
+        // `look(at:)` repart de l'orientation déjà roulée et le roulis
+        // s'additionne d'une image sur l'autre : la vue part en toupie.
         let localRoll = simd_quatf(angle: Float(roll), axis: SIMD3<Float>(0, 0, 1))
-        cameraNode.simdOrientation = simd_normalize(cameraNode.simdOrientation * localRoll)
+        func aim(at point: SIMD3<Double>) {
+            cameraNode.look(
+                at: SCNVector3(point),
+                up: SCNVector3(0, 1, 0),
+                localFront: SCNVector3(0, 0, -1)
+            )
+            cameraNode.simdOrientation = simd_normalize(cameraNode.simdOrientation * localRoll)
+        }
+        aim(at: target)
 
         guard detailExpansionProgress > 0.001, selected != nil else { return }
         // À 100 %, la cible est projetée au centre de la moitié haute (25 % de
         // l'écran). On vise donc sous elle d'une demi-hauteur de frustum.
         let verticalHalfSpan = dist * tan(46.0 / 2 * Astro.DEG)
-        let worldUp = cameraNode.worldUp
         let offset = verticalHalfSpan * 0.5 * detailExpansionProgress
-        let shiftedTarget = target - SIMD3(
-            Double(worldUp.x) * offset,
-            Double(worldUp.y) * offset,
-            Double(worldUp.z) * offset
-        )
-        cameraNode.look(
-            at: SCNVector3(shiftedTarget),
-            up: worldUp,
-            localFront: SCNVector3(0, 0, -1)
-        )
+        aim(at: target - cameraNode.worldUp.simd3 * offset)
     }
 
     // Gestes (appelés du fil principal)
