@@ -264,4 +264,27 @@ final class TextureLoader {
             image.draw(in: CGRect(origin: .zero, size: image.size))
         }
     }
+
+    /// Dégradé d'un cône d'ombre, à lire de gauche (l'axe) à droite (le bord).
+    /// La texture est en niveaux de gris et se compose en `multiply` : le blanc
+    /// ne change rien, le sombre assombrit ce qu'il y a dessous. C'est bien une
+    /// ombre — elle retire de la lumière au lieu d'en poser par-dessus.
+    static func shadowRamp(center: CGFloat, edge: CGFloat, curve: Double) -> UIImage {
+        let w = 256
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: w, height: 1), format: {
+            let f = UIGraphicsImageRendererFormat()
+            f.scale = 1
+            f.opaque = true
+            return f
+        }())
+        return renderer.image { rendererCtx in
+            let ctx = rendererCtx.cgContext
+            for x in 0..<w {
+                let t = pow(Double(x) / Double(w - 1), curve)
+                let g = center + (edge - center) * CGFloat(t)
+                ctx.setFillColor(red: g, green: g, blue: g, alpha: 1)
+                ctx.fill(CGRect(x: x, y: 0, width: 1, height: 1))
+            }
+        }
+    }
 }

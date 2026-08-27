@@ -181,6 +181,47 @@ enum Geo {
         )
     }
 
+    /// Calotte sphérique centrée sur +Y, posée sur une sphère de ce rayon.
+    /// Sert à peindre une tache *sur* le globe : une pastille plate flotterait
+    /// au-dessus, et l'ombre d'une éclipse couvre un tiers du disque terrestre.
+    /// L'UV est radiale — u va de 0 au centre à 1 au bord — pour qu'un dégradé
+    /// horizontal s'y enroule en cercle.
+    static func sphericalCap(radius: Double, halfAngle: Double,
+                             rings: Int = 14, segments: Int = 48) -> SCNGeometry {
+        var vertices: [SCNVector3] = [], normals: [SCNVector3] = [], uvs: [CGPoint] = []
+        var indices: [Int32] = []
+        for iy in 0...rings {
+            let v = Double(iy) / Double(rings)
+            let theta = v * halfAngle
+            for ix in 0...segments {
+                let phi = Double(ix) / Double(segments) * Astro.TAU
+                // Même main que `sphereGeometry` — le signe de x compte : à
+                // l'envers, l'enroulement des triangles s'inverse et la calotte
+                // n'est plus visible que de l'intérieur du globe.
+                let p = SIMD3(-sin(theta) * cos(phi), cos(theta), sin(theta) * sin(phi))
+                vertices.append(SCNVector3(p * radius))
+                normals.append(SCNVector3(p))
+                uvs.append(CGPoint(x: v, y: 0.5))
+            }
+        }
+        let stride = segments + 1
+        for iy in 0..<rings {
+            for ix in 0..<segments {
+                let a = Int32(iy * stride + ix), b = a + 1
+                let c = a + Int32(stride), d = c + 1
+                indices.append(contentsOf: [a, c, b, b, c, d])
+            }
+        }
+        return SCNGeometry(
+            sources: [
+                SCNGeometrySource(vertices: vertices),
+                SCNGeometrySource(normals: normals),
+                SCNGeometrySource(textureCoordinates: uvs),
+            ],
+            elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)]
+        )
+    }
+
     /// Octaèdre (maquette de sonde)
     static func octahedron(radius: Float) -> SCNGeometry {
         let r = radius

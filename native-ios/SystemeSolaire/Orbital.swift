@@ -624,7 +624,7 @@ func moonAngle(phase: Double, period: Double, day d: Double) -> Double {
 /// La latitude compte autant que la longitude : l'orbite est inclinée de 5,14°,
 /// et c'est le passage de la Lune par un nœud qui décide s'il y a éclipse ou
 /// simple nouvelle lune. Sans elle, la Lune couperait le plan à chaque tour.
-func moonEcliptic(day d: Double) -> (lon: Double, lat: Double) {
+func moonEcliptic(day d: Double) -> (lon: Double, lat: Double, km: Double) {
     let t = d / 36525
     let t2 = t * t
     let lp = 218.3164477 + 481267.88123421 * t - 0.0015786 * t2  // longitude moyenne
@@ -665,7 +665,106 @@ func moonEcliptic(day d: Double) -> (lon: Double, lat: Double) {
         + 0.009266 * s(2 * dd + mp - f)
         + 0.008822 * s(2 * mp - f)
 
-    return (lon.truncatingRemainder(dividingBy: 360), lat)
+    // Distance : c'est elle qui décide de la taille de l'ombre, et si l'éclipse
+    // est totale ou annulaire — le cône d'ombre n'atteint pas toujours le sol.
+    func c(_ deg: Double) -> Double { cos(deg * Astro.DEG) }
+    let km = 385_000.56
+        - 20905.355 * c(mp)
+        - 3699.111 * c(2 * dd - mp)
+        - 2955.968 * c(2 * dd)
+        - 569.925 * c(2 * mp)
+        + 246.158 * c(2 * dd - 2 * mp)
+        - 204.586 * c(2 * dd - m)
+        - 170.733 * c(2 * dd + mp)
+        - 152.138 * c(2 * dd - m - mp)
+        - 129.620 * c(m - mp)
+        + 108.743 * c(dd)
+        + 104.755 * c(m + mp)
+        + 79.661 * c(mp - 2 * f)
+        + 48.888 * c(m)
+        + 10.321 * c(2 * dd - 2 * f)
+
+    return (lon.truncatingRemainder(dividingBy: 360), lat, km)
+}
+
+/// Longitude écliptique géocentrique du Soleil et sa distance, en degrés et en
+/// kilomètres. La scène a déjà une Terre képlérienne, mais elle rend une
+/// position *comprimée en log* : pour une ombre, il faut les vraies unités.
+func sunEcliptic(day d: Double) -> (lon: Double, km: Double) {
+    let t = d / 36525
+    let l0 = 280.46646 + 36000.76983 * t + 0.0003032 * t * t
+    let m = 357.52911 + 35999.05029 * t - 0.0001537 * t * t
+    let e = 0.016708634 - 0.000042037 * t
+    let mr = m * Astro.DEG
+    let c = (1.914602 - 0.004817 * t) * sin(mr)
+        + (0.019993 - 0.000101 * t) * sin(2 * mr)
+        + 0.000289 * sin(3 * mr)
+    let nu = mr + c * Astro.DEG
+    let r = 1.000001018 * (1 - e * e) / (1 + e * cos(nu))
+    return ((l0 + c).truncatingRemainder(dividingBy: 360), r * 149_597_870.7)
+}
+
+/// Ombre d'une éclipse de Soleil, dans les vraies unités.
+///
+/// L'axe d'ombre est la droite qui part du centre du Soleil et passe par le
+/// centre de la Lune. Là où elle perce le globe, il fait nuit en plein jour.
+/// Si elle le manque, il n'y a pas d'éclipse centrale — au mieux une partielle
+/// quelque part, qu'on ne dessine pas.
+///
+/// Les deux rayons sont ceux des cônes à cette distance : la pénombre s'ouvre,
+/// l'ombre se referme. Quand l'ombre se referme *avant* d'arriver au sol, son
+/// rayon devient négatif : l'éclipse est annulaire, un anneau de Soleil reste
+/// visible. On garde alors sa valeur absolue, et `annulaire` le dit.
+struct EclipseShadow {
+    let lat: Double, lon: Double       // degrés, coordonnées géographiques
+    let umbraKm: Double                // rayon de l'ombre au sol
+    let penumbraKm: Double             // rayon de la pénombre au sol
+    let annular: Bool
+}
+
+func solarEclipse(day d: Double) -> EclipseShadow? {
+    let sunRadiusKm = 696_000.0, moonRadiusKm = 1737.4, earthRadiusKm = 6378.14
+
+    let sun = sunEcliptic(day: d)
+    let moon = moonEcliptic(day: d)
+    let sl = sun.lon * Astro.DEG
+    let ml = moon.lon * Astro.DEG, mb = moon.lat * Astro.DEG
+
+    // Repère écliptique géocentrique rectangulaire, en km
+    let s = SIMD3(cos(sl), sin(sl), 0.0) * sun.km
+    let mo = SIMD3(cos(mb) * cos(ml), cos(mb) * sin(ml), sin(mb)) * moon.km
+
+    let axis = mo - s
+    let dsm = simd_length(axis)
+    guard dsm > 0 else { return nil }
+    let u = axis / dsm
+
+    // Intersection de l'axe avec le globe : la racine la plus proche du Soleil
+    let b = simd_dot(mo, u)
+    let disc = b * b - (simd_dot(mo, mo) - earthRadiusKm * earthRadiusKm)
+    guard disc >= 0 else { return nil }
+    let t = -b - disc.squareRoot()
+    guard t > 0 else { return nil }
+    let p = mo + u * t
+
+    // Rayons des cônes à la distance parcourue depuis la Lune
+    let umbra = moonRadiusKm - t * (sunRadiusKm - moonRadiusKm) / dsm
+    let penumbra = moonRadiusKm + t * (sunRadiusKm + moonRadiusKm) / dsm
+
+    // Écliptique -> équatorial, puis on retranche le temps sidéral
+    let eps = 23.4393 * Astro.DEG
+    let xe = p.x
+    let ye = p.y * cos(eps) - p.z * sin(eps)
+    let ze = p.y * sin(eps) + p.z * cos(eps)
+    let r = simd_length(SIMD3(xe, ye, ze))
+    let lat = asin(ze / r) / Astro.DEG
+    var lon = (atan2(ye, xe) - Astro.gmst(d)) / Astro.DEG
+    lon = lon.truncatingRemainder(dividingBy: 360)
+    if lon > 180 { lon -= 360 }
+    if lon < -180 { lon += 360 }
+
+    return EclipseShadow(lat: lat, lon: lon, umbraKm: abs(umbra),
+                         penumbraKm: penumbra, annular: umbra < 0)
 }
 
 /// Position d'une lune dans le repère de sa planète.

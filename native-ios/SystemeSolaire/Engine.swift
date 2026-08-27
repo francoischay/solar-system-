@@ -364,6 +364,14 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private let homeMarker = SCNNode()
     private let homeDot = SCNNode()
     private let homeHalo = SCNNode()
+    /// Ombre d'une éclipse de Soleil, posée sur le globe et solidaire de sa
+    /// rotation. Deux calottes : la pénombre couvre un bon tiers du disque, et
+    /// l'ombre vraie n'est qu'un point — c'est sa taille réelle, une centaine de
+    /// kilomètres sur six mille. C'est ce point qui traverse un pays.
+    private let eclipsePenumbra = SCNNode()
+    private let eclipseUmbra = SCNNode()
+    private var drawnPenumbraAngle = -1.0
+    private var drawnUmbraAngle = -1.0
     private let earthTilt = simd_quatd(angle: -23.44 * Astro.DEG, axis: SIMD3(1, 0, 0))
     private let locationManager = CLLocationManager()
 
@@ -628,6 +636,29 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         homeMarker.addChildNode(homeHalo)
         earth.node.addChildNode(homeMarker)
 
+        // Ombre d'éclipse. Les deux calottes sont dessinées après le globe et ne
+        // s'écrivent pas dans le tampon de profondeur, mais le lisent : celle qui
+        // tombe de l'autre côté de la Terre reste cachée derrière elle.
+        for (node, ramp, curve) in [
+            (eclipsePenumbra, TextureLoader.shadowRamp(center: 0.24, edge: 1, curve: 0.55), 0.0),
+            (eclipseUmbra, TextureLoader.shadowRamp(center: 0.05, edge: 0.34, curve: 2.2), 0.0),
+        ] {
+            _ = curve
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = ramp
+            material.diffuse.wrapS = .clamp
+            material.diffuse.wrapT = .clamp
+            material.blendMode = .multiply
+            material.writesToDepthBuffer = false
+            material.readsFromDepthBuffer = true
+            node.geometry = SCNGeometry()
+            node.geometry?.materials = [material]
+            node.renderingOrder = 4
+            node.isHidden = true
+            earth.node.addChildNode(node)
+        }
+
         // Trajectoire de lancement (coeur + halo additive + tête lumineuse)
         launchArcCore.isHidden = true
         launchArcGlow.isHidden = true
@@ -727,6 +758,42 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         homeMarker.position = SCNVector3(normal * Astro.EARTH_RADIUS)
         let rotation = simd_quatd(from: SIMD3(0, 1, 0), to: simd_normalize(normal))
         homeMarker.orientation = SCNQuaternion(rotation)
+    }
+
+    /// Pose l'ombre d'une éclipse sur le globe, ou la range s'il n'y en a pas.
+    ///
+    /// `solarEclipse` travaille en vraies unités et rend des coordonnées
+    /// géographiques : elles se posent ici exactement comme le point de
+    /// géolocalisation, dans le repère du globe, donc l'ombre tourne avec lui.
+    /// La géométrie n'est refaite que si l'ouverture du cône a bougé — pendant
+    /// une éclipse elle change lentement, et le reste du temps il n'y a rien.
+    private func updateEclipseShadow() {
+        guard let shadow = solarEclipse(day: day) else {
+            eclipsePenumbra.isHidden = true
+            eclipseUmbra.isHidden = true
+            return
+        }
+        let normal = simd_normalize(Astro.geoToLocal(lat: shadow.lat, lon: shadow.lon, radius: 1))
+        let orientation = SCNQuaternion(simd_quatd(from: SIMD3(0, 1, 0), to: normal))
+        // Un rayon au sol rapporté au rayon terrestre donne l'ouverture du cône
+        // vue du centre de la Terre — l'angle de la calotte à découper. Les deux
+        // hauteurs (1,2 % et 1,6 % du rayon) ne sont pas cosmétiques : à 0,4 %
+        // la pénombre perdait le test de profondeur contre le globe et ne
+        // s'affichait pas du tout, alors que l'ombre, un cran plus haut, passait.
+        for (node, km, drawn, lift) in [
+            (eclipsePenumbra, shadow.penumbraKm, \Engine.drawnPenumbraAngle, 1.012),
+            (eclipseUmbra, shadow.umbraKm, \Engine.drawnUmbraAngle, 1.016),
+        ] {
+            let angle = min(1.4, km / Astro.EARTH_KM)
+            if abs(angle - self[keyPath: drawn]) > angle * 0.02 {
+                self[keyPath: drawn] = angle
+                let material = node.geometry?.materials.first
+                node.geometry = Geo.sphericalCap(radius: Astro.EARTH_RADIUS * lift, halfAngle: angle)
+                if let material { node.geometry?.materials = [material] }
+            }
+            node.orientation = orientation
+            node.isHidden = false
+        }
     }
 
     // MARK: Repère TEME -> scène
@@ -1812,6 +1879,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
         // Le globe suit le temps sidéral et porte l'inclinaison de 23,44°
         earth.node.orientation = SCNQuaternion(earthTilt * simd_quatd(angle: Astro.gmst(day), axis: SIMD3(0, 1, 0)))
+        updateEclipseShadow()
 
         // Sondes
         for mission in missions {
