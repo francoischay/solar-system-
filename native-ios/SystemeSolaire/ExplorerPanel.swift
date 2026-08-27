@@ -55,7 +55,7 @@ struct ExplorerPanel: View {
                 tab("Lancements", .launches)
             }
             .padding(3)
-            .background(Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.34), in: RoundedRectangle(cornerRadius: 16))
+            .background(Color(red: 0.06, green: 0.035, blue: 0.19).opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
             Button {
                 withAnimation(.easeOut(duration: 0.18)) { engine.setExploreView(.none) }
             } label: {
@@ -80,11 +80,11 @@ struct ExplorerPanel: View {
                 .font(TypeScale.label)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
-                .foregroundStyle(active ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.62))
+                .foregroundStyle(active ? Highlight.ink : .white.opacity(0.62))
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 2)
                 .padding(.vertical, 8)
-                .background(active ? Color(red: 0.96, green: 0.95, blue: 1) : .clear, in: RoundedRectangle(cornerRadius: 13))
+                .background(active ? Highlight.fill : .clear, in: RoundedRectangle(cornerRadius: 13))
         }
     }
 }
@@ -119,7 +119,7 @@ struct ExplorerRow<Trailing: View>: View {
                 }
             }
             .font(TypeScale.glyph)
-            .foregroundStyle(Color(red: 0.08, green: 0.09, blue: 0.22))
+            .foregroundStyle(Highlight.ink)
             .frame(width: RowStyle.chip, height: RowStyle.chip)
             .background(chip, in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 2) {
@@ -256,7 +256,7 @@ struct SatelliteList: View {
                     .font(TypeScale.label)
                     .foregroundStyle(.white.opacity(0.8))
             }
-            .tint(Color(red: 0.46, green: 0.44, blue: 0.94))
+            .tint(Highlight.violet)
             ListNote(text: engine.satelliteNote)
         }
         .padding(.top, 4)
@@ -288,7 +288,7 @@ struct LaunchList: View {
                             VStack(alignment: .trailing, spacing: 2) {
                                 Text(countdown(launch))
                                     .font(TypeScale.label)
-                                    .foregroundStyle(Color(red: 0.62, green: 0.95, blue: 0.86))
+                                    .foregroundStyle(Highlight.warm)
                                 Text(launch.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
                                     .font(TypeScale.meta)
                                     .foregroundStyle(RowStyle.meta)

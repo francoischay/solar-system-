@@ -53,8 +53,8 @@ struct ContentView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(red: 0.14, green: 0.12, blue: 0.38).opacity(0.72), in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(0.4), lineWidth: 1))
+                .background(Color(red: 0.12, green: 0.07, blue: 0.30).opacity(0.72), in: Capsule())
+                .overlay(Capsule().strokeBorder(GlassStyle.border.opacity(0.8), lineWidth: 1))
                 .padding(.trailing, 8)
         }
         .frame(maxHeight: .infinity, alignment: .center)
@@ -78,9 +78,9 @@ struct ContentView: View {
                 } label: {
                     Text(viewGlyph)
                         .font(TypeScale.glyph)
-                        .foregroundStyle(engine.exploreView != .none ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.9))
+                        .foregroundStyle(engine.exploreView != .none ? Highlight.ink : .white.opacity(0.9))
                         .frame(width: DockMetrics.height, height: DockMetrics.height)
-                        .background(engine.exploreView != .none ? AnyShapeStyle(Color(red: 0.96, green: 0.95, blue: 1)) : AnyShapeStyle(GlassStyle.fill), in: Circle())
+                        .background(engine.exploreView != .none ? AnyShapeStyle(Highlight.fill) : AnyShapeStyle(GlassStyle.fill), in: Circle())
                         .overlay(Circle().strokeBorder(GlassStyle.border, lineWidth: 1))
                 }
                 .buttonStyle(PressScaleButtonStyle())
@@ -95,9 +95,9 @@ struct ContentView: View {
                         // Une valeur, pas un pictogramme : elle se lit en corps de
                         // libellé, sinon les deux cercles se ressemblent trop.
                         .font(TypeScale.label)
-                        .foregroundStyle(scaleMenuOpen ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.9))
+                        .foregroundStyle(scaleMenuOpen ? Highlight.ink : .white.opacity(0.9))
                         .frame(width: DockMetrics.height, height: DockMetrics.height)
-                        .background(scaleMenuOpen ? AnyShapeStyle(Color(red: 0.96, green: 0.95, blue: 1)) : AnyShapeStyle(GlassStyle.fill), in: Circle())
+                        .background(scaleMenuOpen ? AnyShapeStyle(Highlight.fill) : AnyShapeStyle(GlassStyle.fill), in: Circle())
                         .overlay(Circle().strokeBorder(GlassStyle.border, lineWidth: 1))
                 }
                 .buttonStyle(PressScaleButtonStyle())
@@ -134,23 +134,27 @@ struct ContentView: View {
 
 // MARK: - Fond
 
+/// Le champ est presque noir et la couleur ne vit que là où il y a une source :
+/// le violet du limbe en bas à gauche, un souffle corail en haut à droite. Un
+/// bleu saturé de bord à bord — ce qu'il y avait avant — rendait l'écran plus
+/// clair que son icône, et les planètes y perdaient leur relief.
 struct SpaceBackground: View {
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.067, green: 0.075, blue: 0.24),
-                    Color(red: 0.09, green: 0.094, blue: 0.345),
-                    Color(red: 0.16, green: 0.125, blue: 0.39),
+                    Color(red: 0.010, green: 0.014, blue: 0.085),
+                    Color(red: 0.055, green: 0.032, blue: 0.165),
+                    Color(red: 0.10, green: 0.055, blue: 0.235),
                 ],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
             RadialGradient(
-                colors: [Color(red: 0.51, green: 0.29, blue: 0.92).opacity(0.68), .clear],
+                colors: [Highlight.violet.opacity(0.38), .clear],
                 center: UnitPoint(x: 0.12, y: 0.86), startRadius: 0, endRadius: 320
             )
             RadialGradient(
-                colors: [Color(red: 0.19, green: 0.24, blue: 0.71).opacity(0.24), .clear],
+                colors: [Highlight.warm.opacity(0.10), .clear],
                 center: UnitPoint(x: 0.8, y: 0.18), startRadius: 0, endRadius: 300
             )
         }
@@ -178,10 +182,11 @@ enum RowStyle {
     static let radius: CGFloat = 14
     static let chip: CGFloat = 34
     static let gap: CGFloat = 11
-    static let idleFill = Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.28)
-    static let selectedFill = Color(red: 0.62, green: 0.6, blue: 1).opacity(0.2)
-    static let selectedBorder = Color(red: 0.78, green: 0.79, blue: 1).opacity(0.75)
-    static let meta = Color.white.opacity(0.62)
+    static let idleFill = Color(red: 0.06, green: 0.035, blue: 0.19).opacity(0.34)
+    static let selectedFill = Highlight.accent.opacity(0.16)
+    static let selectedBorder = Highlight.accent.opacity(0.55)
+    /// Un blanc neutre tire au bleu sur un champ violet : celui-ci est tiède.
+    static let meta = Color(red: 1.00, green: 0.93, blue: 0.88).opacity(0.58)
 
     /// Couleur de pastille pour une ligne de liste. La règle vit dans
     /// `RampPalette` : la scène s'en sert aussi, et un dégradé à deux
@@ -207,14 +212,36 @@ enum DockMetrics {
     static let maxGroupWidth: CGFloat = 560
 }
 
+/// Les quatre couleurs relevées sur l'icône qui ne sont pas dans le ruban des
+/// listes. `RampPalette` donne un rang à un objet ; celles-ci disent l'état de
+/// l'interface — ce qui est actif, ce qui est choisi, ce qui compte à rebours.
+/// Une seule définition : elles reviennent une demi-douzaine de fois chacune.
+enum Highlight {
+    /// Crème du halo de l'étoile. Remplace le blanc pur des pilules actives :
+    /// dans l'icône, le blanc pur est le cœur de l'étoile, quelques pixels. En
+    /// aplat de la taille d'un onglet, il éblouit et sort de la gamme.
+    static let fill = Color(red: 1.00, green: 0.93, blue: 0.86)
+    /// Le fond de l'icône, pour ce qui s'écrit sur une pilule ou une pastille.
+    static let ink = Color(red: 0.09, green: 0.05, blue: 0.22)
+    /// Rose du bord éclairé : la sélection, partout. Il y avait trois familles
+    /// d'accent — lavande, indigo, vert d'eau — et donc aucune.
+    static let accent = Color(red: 0.98, green: 0.42, blue: 0.72)
+    /// Violet du limbe, pour le halo du fond et les réglages.
+    static let violet = Color(red: 0.42, green: 0.20, blue: 0.88)
+    /// Corail de la crête, pour une valeur qui doit se détacher sans crier.
+    static let warm = Color(red: 1.00, green: 0.60, blue: 0.51)
+}
+
 enum GlassStyle {
     static let fill = LinearGradient(
-        colors: [Color(red: 0.48, green: 0.46, blue: 0.88).opacity(0.26), Color(red: 0.12, green: 0.13, blue: 0.36).opacity(0.3)],
+        colors: [Color(red: 0.44, green: 0.26, blue: 0.82).opacity(0.20), Color(red: 0.10, green: 0.06, blue: 0.26).opacity(0.34)],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
-    static let border = Color(red: 0.75, green: 0.76, blue: 1).opacity(0.3)
+    static let border = Color(red: 0.88, green: 0.78, blue: 1).opacity(0.24)
+    /// Le panneau se pose sur le fond au lieu d'y flotter : mêmes violets, deux
+    /// crans plus sombres, et non plus un bleu qui n'existe nulle part ailleurs.
     static let panel = LinearGradient(
-        colors: [Color(red: 0.18, green: 0.17, blue: 0.47).opacity(0.93), Color(red: 0.08, green: 0.08, blue: 0.26).opacity(0.95)],
+        colors: [Color(red: 0.145, green: 0.085, blue: 0.355).opacity(0.92), Color(red: 0.045, green: 0.028, blue: 0.165).opacity(0.95)],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 }
@@ -240,8 +267,8 @@ struct LabelsOverlay: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
-                    .background(Color(red: 0.086, green: 0.106, blue: 0.267).opacity(0.92), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(red: 0.5, green: 0.88, blue: 1).opacity(0.42), lineWidth: 1))
+                    .background(Color(red: 0.055, green: 0.032, blue: 0.175).opacity(0.92), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Highlight.accent.opacity(0.34), lineWidth: 1))
                     .position(x: label.x, y: label.y - 26)
             }
         }
@@ -520,7 +547,7 @@ enum DateLinker {
             guard let day, let range = Range(match.range, in: text),
                   let attrRange = result.range(of: String(text[range])) else { continue }
             result[attrRange].link = URL(string: "sscale://day/\(day)")
-            result[attrRange].foregroundColor = Color(red: 0.86, green: 0.9, blue: 1)
+            result[attrRange].foregroundColor = Highlight.fill
             result[attrRange].underlineStyle = .single
         }
         return result
@@ -540,11 +567,11 @@ struct TimelineBar: View {
                 Color.clear
                 Text(engine.dateText.isEmpty ? "—" : engine.dateText)
                     .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Color(red: 0.09, green: 0.095, blue: 0.24))
+                    .foregroundStyle(Highlight.ink)
                     .padding(.horizontal, 11)
                     .padding(.vertical, 8)
-                    .background(.white.opacity(0.96), in: Capsule())
-                    .shadow(color: Color(red: 0.03, green: 0.03, blue: 0.16).opacity(draggingHandle ? 0.34 : 0.2), radius: draggingHandle ? 15 : 12, y: 8)
+                    .background(Highlight.fill.opacity(0.96), in: Capsule())
+                    .shadow(color: Color(red: 0.02, green: 0.01, blue: 0.10).opacity(draggingHandle ? 0.34 : 0.2), radius: draggingHandle ? 15 : 12, y: 8)
                     .scaleEffect(draggingHandle ? 1.06 : 1)
                     .offset(x: draggingHandle ? -72 : 0)
                     .animation(.easeOut(duration: 0.16), value: draggingHandle)
@@ -621,9 +648,9 @@ struct PlaybackBar: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(TypeScale.label)
-                .foregroundStyle(prominent ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.82))
+                .foregroundStyle(prominent ? Highlight.ink : .white.opacity(0.82))
                 .frame(width: 34, height: 34)
-                .background(prominent ? AnyShapeStyle(Color(red: 0.96, green: 0.95, blue: 1))
+                .background(prominent ? AnyShapeStyle(Highlight.fill)
                                       : AnyShapeStyle(Color.clear),
                             in: Circle())
         }
@@ -650,11 +677,11 @@ struct ScaleMenu: View {
                 } label: {
                     Text(option.0)
                         .font(TypeScale.label)
-                        .foregroundStyle(active ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.68))
+                        .foregroundStyle(active ? Highlight.ink : .white.opacity(0.68))
                         .frame(minWidth: 92, alignment: .leading)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 10)
-                        .background(active ? Color(red: 0.96, green: 0.95, blue: 1) : .clear, in: RoundedRectangle(cornerRadius: 15))
+                        .background(active ? Highlight.fill : .clear, in: RoundedRectangle(cornerRadius: 15))
                 }
             }
         }
