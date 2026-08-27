@@ -31,11 +31,17 @@ func uiColor(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
 /// s'accorde à la même règle — trace, maquette et anneau d'un objet prennent la
 /// couleur de sa pastille — sinon la liste et le ciel parleraient deux langues.
 ///
-/// Le ruban reste dans la famille de l'écran : menthe des valeurs, lavande des
-/// panneaux, orchidée en fin de course. Pas un arc-en-ciel de plus.
+/// Le ruban est celui de l'icône de l'app, relevé sur l'image elle-même : le
+/// violet du limbe de la planète, le magenta qui remonte vers la lumière, le
+/// rose du bord éclairé, le corail de la crête, l'or du halo de l'étoile. Une
+/// seule gamme pour l'icône, les listes et le ciel. Les deux extrêmes de
+/// l'icône — son fond presque noir et le blanc du cœur de l'étoile — restent
+/// dehors : une pastille noire sur un panneau sombre ne se voit pas, et un
+/// blanc pur ne serait plus une couleur d'objet.
 enum RampPalette {
     private static let stops: [(r: Double, g: Double, b: Double)] = [
-        (0.49, 0.92, 0.82), (0.56, 0.82, 1.00), (0.73, 0.71, 1.00), (0.91, 0.66, 0.94),
+        (0.42, 0.20, 0.88), (0.72, 0.22, 0.75), (0.98, 0.42, 0.72),
+        (1.00, 0.60, 0.51), (1.00, 0.86, 0.74),
     ]
 
     /// `position` : 0 pour la première ligne, 1 pour la dernière.
