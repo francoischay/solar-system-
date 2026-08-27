@@ -100,7 +100,10 @@ enum RowGlyph {
 /// pastille, nom, méta, appendice optionnel — pour que la grille ne change pas
 /// sous le doigt quand on passe de l'un à l'autre.
 struct ExplorerRow<Trailing: View>: View {
-    let color: UInt32
+    /// Aplat de la pastille : la place de la ligne dans le dégradé de la liste.
+    /// Un objet de la scène la fournit lui-même, pour que sa trace et sa
+    /// pastille ne puissent pas diverger.
+    let chip: Color
     let glyph: RowGlyph
     let title: String
     let meta: String
@@ -118,7 +121,7 @@ struct ExplorerRow<Trailing: View>: View {
             .font(TypeScale.glyph)
             .foregroundStyle(Color(red: 0.08, green: 0.09, blue: 0.22))
             .frame(width: RowStyle.chip, height: RowStyle.chip)
-            .background(Color(uiColor: uiColor(color)), in: RoundedRectangle(cornerRadius: 10))
+            .background(chip, in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(TypeScale.row)
@@ -149,8 +152,8 @@ struct ExplorerRow<Trailing: View>: View {
 }
 
 extension ExplorerRow where Trailing == EmptyView {
-    init(color: UInt32, glyph: RowGlyph, title: String, meta: String, selected: Bool) {
-        self.init(color: color, glyph: glyph, title: title, meta: meta, selected: selected) { EmptyView() }
+    init(chip: Color, glyph: RowGlyph, title: String, meta: String, selected: Bool) {
+        self.init(chip: chip, glyph: glyph, title: title, meta: meta, selected: selected) { EmptyView() }
     }
 }
 
@@ -177,7 +180,7 @@ struct MissionList: View {
                     withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
                 } label: {
                     ExplorerRow(
-                        color: mission.spec.color,
+                        chip: Color(uiColor: mission.rampColor),
                         glyph: .symbol("paperplane.fill"),
                         title: mission.spec.n,
                         meta: mission.spec.valid,
@@ -209,7 +212,7 @@ struct CrewedList: View {
                         withAnimation(.easeOut(duration: 0.18)) { engine.playMission(mission) }
                     } label: {
                         ExplorerRow(
-                            color: mission.spec.color,
+                            chip: Color(uiColor: mission.rampColor),
                             glyph: .symbol("person.fill"),
                             title: mission.spec.n,
                             meta: mission.spec.valid,
@@ -238,7 +241,7 @@ struct SatelliteList: View {
                         withAnimation(.easeOut(duration: 0.18)) { engine.selectSatellite(model) }
                     } label: {
                         ExplorerRow(
-                            color: model.spec.color,
+                            chip: Color(uiColor: model.rampColor),
                             glyph: .text(model.spec.icon),
                             title: model.spec.n,
                             meta: engine.satelliteMeta(model),
@@ -271,12 +274,12 @@ struct LaunchList: View {
     var body: some View {
         VStack(spacing: 12) {
             VStack(spacing: 7) {
-                ForEach(engine.launchSpecs) { launch in
+                ForEach(Array(engine.launchSpecs.enumerated()), id: \.element.id) { index, launch in
                     Button {
                         withAnimation(.easeOut(duration: 0.18)) { engine.selectLaunch(launch) }
                     } label: {
                         ExplorerRow(
-                            color: launch.color,
+                            chip: RowStyle.chipColor(at: RowStyle.rampPosition(index, of: engine.launchSpecs.count)),
                             glyph: .symbol("arrow.up"),
                             title: launch.n,
                             meta: launch.meta,

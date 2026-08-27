@@ -182,6 +182,17 @@ enum RowStyle {
     static let selectedFill = Color(red: 0.62, green: 0.6, blue: 1).opacity(0.2)
     static let selectedBorder = Color(red: 0.78, green: 0.79, blue: 1).opacity(0.75)
     static let meta = Color.white.opacity(0.62)
+
+    /// Couleur de pastille pour une ligne de liste. La règle vit dans
+    /// `RampPalette` : la scène s'en sert aussi, et un dégradé à deux
+    /// définitions finirait par diverger.
+    static func chipColor(at position: Double) -> Color {
+        Color(uiColor: RampPalette.uiColor(at: position))
+    }
+
+    static func rampPosition(_ index: Int, of count: Int) -> Double {
+        RampPalette.position(index, of: count)
+    }
 }
 
 /// Le dock est une rangée : les deux cercles et le cartouche replié partagent

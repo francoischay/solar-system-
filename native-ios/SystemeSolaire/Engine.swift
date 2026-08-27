@@ -49,13 +49,17 @@ final class MoonSystem {
 final class Mission {
     let spec: MissionSpec
     let node = SCNNode()
+    /// Couleur de la pastille de sa ligne. La maquette et la trace la portent
+    /// aussi : c'est ce qui relie la liste au ciel.
+    let rampColor: UIColor
     let trail: TrailLine
     var trailCenter = SIMD3<Double>()
     var trailRadius = 0.0
     var lastTrailDay = Double.nan
-    init(spec: MissionSpec) {
+    init(spec: MissionSpec, ramp: Double) {
         self.spec = spec
-        trail = TrailLine(color: uiColor(spec.color))
+        rampColor = RampPalette.uiColor(at: ramp)
+        trail = TrailLine(color: rampColor)
     }
 }
 
@@ -80,7 +84,13 @@ final class SatModel {
     var lastConstellationUpdate: TimeInterval = 0
     var ringDay = Double.nan
     var isConstellation: Bool { spec.group != nil }
-    init(spec: SatSpec) { self.spec = spec }
+    /// Comme pour une sonde : nuage de points et anneau prennent la couleur de
+    /// la pastille de la ligne.
+    let rampColor: UIColor
+    init(spec: SatSpec, ramp: Double) {
+        self.spec = spec
+        rampColor = RampPalette.uiColor(at: ramp)
+    }
     var hitRadius: Double { 0.32 }
 }
 
@@ -532,18 +542,23 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
         // Sondes, puis vols habités : même maquette, même tracé — seule la
         // trajectoire change d'échelle.
-        for spec in missionSpecs + crewedSpecs {
-            let mission = Mission(spec: spec)
+        // Chaque onglet a son propre dégradé : une sonde et un vol habité ne se
+        // lisent jamais côte à côte, leurs rangs sont donc comptés à part.
+        for (index, spec) in (missionSpecs + crewedSpecs).enumerated() {
+            let ramp = index < missionSpecs.count
+                ? RampPalette.position(index, of: missionSpecs.count)
+                : RampPalette.position(index - missionSpecs.count, of: crewedSpecs.count)
+            let mission = Mission(spec: spec, ramp: ramp)
             let core = SCNNode(geometry: Geo.octahedron(radius: 0.75))
             let coreMaterial = SCNMaterial()
             coreMaterial.lightingModel = .blinn
-            coreMaterial.diffuse.contents = uiColor(spec.color)
-            coreMaterial.emission.contents = uiColor(spec.color, alpha: 0.35)
+            coreMaterial.diffuse.contents = mission.rampColor
+            coreMaterial.emission.contents = mission.rampColor.withAlphaComponent(0.35)
             core.geometry!.materials = [coreMaterial]
             let glow = SCNNode(geometry: SCNSphere(radius: 1.55))
             let glowMaterial = SCNMaterial()
             glowMaterial.lightingModel = .constant
-            glowMaterial.diffuse.contents = uiColor(spec.color)
+            glowMaterial.diffuse.contents = mission.rampColor
             glowMaterial.transparency = 0.11
             glowMaterial.writesToDepthBuffer = false
             glow.geometry!.materials = [glowMaterial]
@@ -557,8 +572,8 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
         // Satellites
         scene.rootNode.addChildNode(satelliteOrbits)
-        for spec in satelliteSpecs {
-            satModels.append(makeSatelliteModel(spec))
+        for (index, spec) in satelliteSpecs.enumerated() {
+            satModels.append(makeSatelliteModel(spec, ramp: RampPalette.position(index, of: satelliteSpecs.count)))
         }
 
         // Point de géolocalisation, solidaire de la rotation du globe
@@ -619,8 +634,8 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         placeCamera()
     }
 
-    private func makeSatelliteModel(_ spec: SatSpec) -> SatModel {
-        let model = SatModel(spec: spec)
+    private func makeSatelliteModel(_ spec: SatSpec, ramp: Double) -> SatModel {
+        let model = SatModel(spec: spec, ramp: ramp)
         model.launchYear = TLEParser.launchYear(line1: spec.tleFallback.components(separatedBy: "\n").first ?? "")
         if spec.group != nil {
             // constellation : un nuage de points, pas de maquette
@@ -1094,7 +1109,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             let p = (normal * cos(downrange) + east * sin(downrange)) * Astro.orbitSceneRadius(km: Astro.EARTH_KM + altitude)
             points.append(p)
         }
-        buildLaunchArc(points: points, color: uiColor(launch.color))
+        // Le rang du lancement dans sa liste, pour que l'arc sorte de la même
+        // couleur que la pastille qu'on vient de toucher.
+        let rank = launchSpecs.firstIndex(of: launch) ?? 0
+        buildLaunchArc(points: points,
+                       color: RampPalette.uiColor(at: RampPalette.position(rank, of: launchSpecs.count)))
         exploreView = .none
         lastExploreSection = .launches
         launchClock = 0
@@ -2394,7 +2413,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         model.constellationDay = sceneDay
         let pointSize = max(0.02, min(0.35, dist * 0.014))
         model.node.geometry = Geo.pointsGeometry(
-            points: points, color: uiColor(model.spec.color),
+            points: points, color: model.rampColor,
             sprite: constellationSprite,
             pointSize: CGFloat(pointSize), minScreenRadius: 1, maxScreenRadius: 7,
             additive: true
@@ -2417,7 +2436,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             }
         }
         guard points.count >= 8 else { return }
-        orbitNode.geometry = Geo.lineGeometry(points: points, color: uiColor(model.spec.color))
+        orbitNode.geometry = Geo.lineGeometry(points: points, color: model.rampColor)
     }
 
     // Étiquette de l'objet suivi (sonde ou satellite sélectionné)

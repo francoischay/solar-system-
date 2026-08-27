@@ -23,6 +23,42 @@ func uiColor(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
     )
 }
 
+/// Le dégradé des listes de l'explorateur, et sa seule définition.
+///
+/// Une pastille ne porte plus la couleur propre de l'objet mais son rang dans
+/// la liste : chacune reste un aplat qu'on peut nommer, et la liste entière se
+/// lit comme un seul ruban, ce qui donne au défilement une direction. La scène
+/// s'accorde à la même règle — trace, maquette et anneau d'un objet prennent la
+/// couleur de sa pastille — sinon la liste et le ciel parleraient deux langues.
+///
+/// Le ruban reste dans la famille de l'écran : menthe des valeurs, lavande des
+/// panneaux, orchidée en fin de course. Pas un arc-en-ciel de plus.
+enum RampPalette {
+    private static let stops: [(r: Double, g: Double, b: Double)] = [
+        (0.49, 0.92, 0.82), (0.56, 0.82, 1.00), (0.73, 0.71, 1.00), (0.91, 0.66, 0.94),
+    ]
+
+    /// `position` : 0 pour la première ligne, 1 pour la dernière.
+    static func rgb(at position: Double) -> (r: Double, g: Double, b: Double) {
+        let t = min(max(position, 0), 1) * Double(stops.count - 1)
+        let low = min(Int(t), stops.count - 2)
+        let f = t - Double(low)
+        let a = stops[low], b = stops[low + 1]
+        return (a.r + (b.r - a.r) * f, a.g + (b.g - a.g) * f, a.b + (b.b - a.b) * f)
+    }
+
+    static func uiColor(at position: Double, alpha: CGFloat = 1) -> UIColor {
+        let c = rgb(at: position)
+        return UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: alpha)
+    }
+
+    /// Place d'une ligne dans le ruban. Une liste d'un seul élément prend le
+    /// départ plutôt qu'une division par zéro.
+    static func position(_ index: Int, of count: Int) -> Double {
+        count > 1 ? Double(index) / Double(count - 1) : 0
+    }
+}
+
 enum ProceduralTexture {
     static func surface(for b: PlanetSpec) -> UIImage {
         let w: CGFloat = 256, h: CGFloat = 128
