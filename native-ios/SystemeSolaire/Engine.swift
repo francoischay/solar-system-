@@ -288,6 +288,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     static let ASCENT_EASE = 2.0
     /// Avancée de l'ascension à laquelle le panache commence à s'éteindre
     static let PLUME_OUT = 0.55
+    /// Rayon du halo au pas de tir, à l'échelle 1. Il enfle jusqu'à deux fois
+    /// cette taille — soit 3 % du rayon terrestre au plus fort, la lueur d'un
+    /// pas de tir et non un champignon.
+    static let PAD_FLARE_RADIUS = 0.018
     @Published var missionBeatLabel = ""
     @Published var playbackPaused = false
     /// Vitesse du rejeu. Elle porte aussi les haptiques : à ×4, le grondement du
@@ -579,7 +583,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         launchArcGlow.isHidden = true
         earth.node.addChildNode(launchArcCore)
         earth.node.addChildNode(launchArcGlow)
-        let flare = SCNSphere(radius: 0.055)
+        // Un rayon de 0,055 mis à l'échelle 2,25 donnait une boule de 640 km de
+        // rayon posée sur la Floride — une explosion nucléaire, pas un décollage.
+        let flare = SCNSphere(radius: Self.PAD_FLARE_RADIUS)
         let flareMaterial = SCNMaterial()
         flareMaterial.lightingModel = .constant
         flareMaterial.diffuse.contents = UIColor(red: 1, green: 0.85, blue: 0.6, alpha: 1)
@@ -2280,7 +2286,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         padFlare.isHidden = heat <= 0.012
         guard !padFlare.isHidden else { return }
         padFlare.opacity = CGFloat(min(1, heat * 1.3))
-        let size = Float(0.55 + heat * 1.7)
+        let size = Float(0.5 + heat * 1.5)
         padFlare.scale = SCNVector3(size, size, size)
     }
 
