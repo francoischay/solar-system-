@@ -592,7 +592,7 @@ struct PlaybackBar: View {
         .padding(.vertical, 4)
         .background(GlassStyle.panel, in: Capsule())
         .overlay(Capsule().strokeBorder(GlassStyle.border, lineWidth: 1))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .transition(.scale(scale: 0.94, anchor: .bottomLeading).combined(with: .opacity))
     }
 

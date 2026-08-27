@@ -907,7 +907,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         timelineVelocity = 0
         edgeDirection = 0
         day = launchDay
-        if dayRange > 100 { setDayRange(100, short: "J") }
+        // Une mission se joue à l'heure : c'est l'échelle où la date affiche
+        // « 16 juil. 13:32 » plutôt qu'un jour entier, et où l'on voit vraiment
+        // le temps avancer pendant le décollage.
+        setDayRange(4.2, short: "H")
         timelineCenter = restCenter(day)
         handleTop = restTop(day)
         handleTopPercent = handleTop
@@ -2108,7 +2111,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         updateDateText()
         updateLabels()
 
-        let showToday = dateTransition == nil && abs(day - Astro.todayDay) > 30
+        // Pendant un rejeu, le bouton n'a rien à proposer : on regarde une
+        // mission, on ne cherche pas à revenir au présent.
+        let showToday = dateTransition == nil && playingMission == nil
+            && abs(day - Astro.todayDay) > 30
         if showToday != showTodayButton {
             DispatchQueue.main.async { self.showTodayButton = showToday }
         }
