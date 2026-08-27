@@ -215,8 +215,13 @@ final class TextureLoader {
         return d
     }
 
+    /// Ordre : textures livrées dans le bundle → cache disque → CDN.
     func load(_ urlString: String, apply: @escaping (UIImage) -> Void) {
         guard let url = URL(string: urlString) else { return }
+        if let image = Self.bundled(url.lastPathComponent) {
+            apply(image)
+            return
+        }
         let local = cacheDir.appendingPathComponent(url.lastPathComponent)
         if let data = try? Data(contentsOf: local), let image = UIImage(data: data) {
             apply(Self.normalized(image))
@@ -228,6 +233,18 @@ final class TextureLoader {
             let safe = Self.normalized(image)
             await MainActor.run { apply(safe) }
         }
+    }
+
+    /// Les .jpg de `Textures/` sont copiés à plat dans le bundle par Xcode ;
+    /// on tente quand même le sous-dossier au cas où il resterait une référence de dossier.
+    private static func bundled(_ fileName: String) -> UIImage? {
+        let name = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext)
+                ?? Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Textures"),
+              let image = UIImage(contentsOfFile: url.path)
+        else { return nil }
+        return normalized(image)
     }
 
     /// Certaines cartes (niveaux de gris, CMJN…) donnent un format de pixel que Metal refuse :
