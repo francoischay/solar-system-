@@ -754,6 +754,14 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         formatter.locale = Locale(identifier: "fr_FR")
         formatter.dateFormat = "d MMM yyyy"
         let epochText = formatter.string(from: Astro.date(fromDay: epoch))
+        // Avant leur lancement, la liste énumère des objets qui n'existent pas
+        // encore : autant le dire plutôt que de laisser un ciel vide.
+        if satModels.allSatisfy({ model in
+            model.launchYear.map { Astro.decimalYear(day) < Double($0) } ?? false
+        }) {
+            satelliteNote = "Aucun satellite à cette date · revenir à aujourd'hui"
+            return
+        }
         satelliteNote = tleUsable()
             ? "Propagation SGP4 · TLE du " + epochText
             : "Positions indicatives · loin du TLE du " + epochText
@@ -882,6 +890,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
     func setExploreView(_ view: ExploreView) {
         if view != exploreView { view == .none ? Haptics.shared.closed() : Haptics.shared.opened() }
+        // Ouvrir l'explorateur, c'est passer à autre chose : le rejeu s'arrête là
+        // où il en est. Sinon la mission continue de faire défiler la date
+        // derrière le panneau, et « Aujourd'hui » reste caché alors que c'est
+        // précisément la sortie dont on a besoin.
+        if view != .none { stopMissionPlayback(clearSelection: false) }
         if view != .none { lastExploreSection = view }
         exploreView = view
         if view == .satellites {
@@ -1036,6 +1049,18 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
     func selectSatellite(_ model: SatModel) {
         Haptics.shared.picked()
+        stopMissionPlayback(clearSelection: false)
+        // Satellite hors de son époque : on revient à aujourd'hui, sinon il n'y a
+        // rien à voir. Même règle que pour une sonde hors de sa période — et le
+        // cas se produit dès qu'on vient de rejouer un vol habité, qui laisse la
+        // scène en 1961 où aucun satellite n'a encore été lancé.
+        if let born = model.launchYear, Astro.decimalYear(day) < Double(born) {
+            // L'échelle d'abord : `setDayRange` remet la transition à zéro, et
+            // appelée après elle effacerait le voyage qu'on vient de lancer.
+            if dayRange < 100 { setDayRange(100, short: "J") }
+            let today = Astro.todayDay
+            animateDate(to: today, top: restTop(today), center: restCenter(today))
+        }
         setSelected(.satellite(model))
         // se placer du côté du satellite, sinon il se retrouve derrière la Terre
         if !model.isConstellation, let offset = satellitePosition(model, day: propagationDay()), simd_length_squared(offset) > 0 {
