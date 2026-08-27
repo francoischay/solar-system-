@@ -2,7 +2,7 @@
   "expo": {
     "name": "Système solaire 3D",
     "slug": "solar-system-3d",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon-cosmic-v2.png",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
