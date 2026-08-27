@@ -30,6 +30,11 @@ struct ContentView: View {
                             .padding(.bottom, 6)
                             .frame(maxWidth: 520)
                     }
+                    if engine.crewedSelection != nil, engine.exploreView == .none {
+                        PlaybackBar()
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 6)
+                    }
                     dock(
                         maxSheetHeight: max(58, proxy.size.height * 0.5),
                         availableWidth: max(0, proxy.size.width - 32)
@@ -549,6 +554,66 @@ struct TimelineBar: View {
             }
         }
         .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+// MARK: - Contrôleur de rejeu
+
+/// Barre de transport d'un vol habité, posée juste au-dessus du cartouche.
+/// Elle ne paraît que pour un vol habité : c'est le seul objet de la scène qui
+/// se *joue* plutôt que de se consulter.
+struct PlaybackBar: View {
+    @EnvironmentObject var engine: Engine
+
+    var body: some View {
+        HStack(spacing: 4) {
+            button("backward.end.fill", label: "Revenir au décollage") { engine.playbackRestart() }
+            button(engine.playbackIsRunning ? "pause.fill" : "play.fill",
+                   label: engine.playbackIsRunning ? "Mettre en pause" : "Lire la mission",
+                   prominent: true) { engine.playbackToggle() }
+            button("forward.end.fill", label: "Aller à la fin") { engine.playbackToEnd() }
+            Divider()
+                .frame(height: 20)
+                .overlay(GlassStyle.border)
+                .padding(.horizontal, 3)
+            // La vitesse tourne en boucle : trois crans ne méritent pas un menu.
+            Button {
+                engine.playbackCycleSpeed()
+            } label: {
+                Text(speedLabel)
+                    .font(TypeScale.label)
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.82))
+                    .frame(minWidth: 38, minHeight: 34)
+            }
+            .accessibilityLabel("Vitesse de lecture, \(speedLabel)")
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(GlassStyle.panel, in: Capsule())
+        .overlay(Capsule().strokeBorder(GlassStyle.border, lineWidth: 1))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .transition(.scale(scale: 0.94, anchor: .bottomLeading).combined(with: .opacity))
+    }
+
+    private var speedLabel: String {
+        "×" + (engine.playbackSpeed == rint(engine.playbackSpeed)
+               ? String(Int(engine.playbackSpeed))
+               : String(format: "%.1f", engine.playbackSpeed))
+    }
+
+    private func button(_ symbol: String, label: String, prominent: Bool = false,
+                        action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(TypeScale.label)
+                .foregroundStyle(prominent ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.82))
+                .frame(width: 34, height: 34)
+                .background(prominent ? AnyShapeStyle(Color(red: 0.96, green: 0.95, blue: 1))
+                                      : AnyShapeStyle(Color.clear),
+                            in: Circle())
+        }
+        .accessibilityLabel(label)
     }
 }
 

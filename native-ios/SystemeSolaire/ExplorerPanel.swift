@@ -160,14 +160,19 @@ struct MissionList: View {
             VStack(spacing: 7) {
                 ForEach(crewed, id: \.spec.n) { row($0, glyph: "person.fill") }
             }
-            ListNote(text: "Trajectoires reconstruites · distances comprimées")
+            ListNote(text: "Choisir un vol le rejoue, du décollage au retour")
         }
         .padding(.top, 4)
     }
 
     private func row(_ mission: Mission, glyph: String) -> some View {
         Button {
-            withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
+            withAnimation(.easeOut(duration: 0.18)) {
+                // Choisir un vol habité, c'est le rejouer : même idiome qu'un
+                // lancement, où la sélection déclenche la séquence.
+                if mission.spec.crewed != nil { engine.playMission(mission) }
+                else { engine.selectMission(mission) }
+            }
         } label: {
             ExplorerRow(
                 color: mission.spec.color,

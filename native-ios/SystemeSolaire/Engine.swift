@@ -177,8 +177,23 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         let startDay, targetDay, startCenter, targetCenter, startTop, targetTop, startTime: Double
     }
     private var dateTransition: DateTransition?
-    static let HANDLE_REST = 62.0
-    func restCenter(_ targetDay: Double) -> Double { targetDay - (Self.HANDLE_REST / 100 - 0.5) * dayRange }
+    /// Marge minimale entre le cartouche et le bout de la piste
+    static let HANDLE_EDGE = 6.0
+
+    /// Position de repos du cartouche de date. « Aujourd'hui » tient le centre de
+    /// la piste et ne bouge pas : c'est le cartouche qui se place par rapport à
+    /// lui. Une date passée monte, une date future descend, et au-delà de ce que
+    /// couvre l'échelle choisie il se plaque contre la borne — on continue de
+    /// voyager dans le temps, mais le sens de lecture reste juste. Sans ça, juillet
+    /// 1969 s'affichait sous « Aujourd'hui », comme s'il venait après 2026.
+    func restTop(_ targetDay: Double) -> Double {
+        let offset = (targetDay - Astro.todayDay) / dayRange * 100
+        return max(Self.HANDLE_EDGE, min(100 - Self.HANDLE_EDGE, 50 + offset))
+    }
+
+    func restCenter(_ targetDay: Double) -> Double {
+        targetDay - (restTop(targetDay) / 100 - 0.5) * dayRange
+    }
 
     // Lancements
     var launchSpecs: [LaunchSpec] = fallbackLaunches
@@ -239,6 +254,54 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     static let MOON_HIDE = 0.28
     /// Durée de l'ascension — le grondement haptique court exactement dessus
     static let LAUNCH_RISE = 3.4
+
+    // Rejeu d'un vol habité : même décollage que les lancements, puis la mission
+    // se déroule jusqu'au retour.
+    var playingMission: Mission?
+    private var playedBeats = 0
+    private var missionCoastClock = 0.0
+    /// Durée du déroulé après l'ascension. Le temps n'y coule pas uniformément :
+    /// il suit la répartition par phase du tracé, sinon trois jours de croisière
+    /// mangeraient tout et les boucles lunaires passeraient en un éclair.
+    static let MISSION_COAST = 38.0
+    /// Fondu de la traînée d'ascension : à l'échelle Terre-Lune, les 400 km du
+    /// décollage ne sont plus qu'un cil. On l'efface plutôt que de le laisser.
+    /// Halo au pas de tir : la lueur qui enfle sous la poussée retenue, puis
+    /// s'éteint quand le vaisseau s'arrache. C'est tout ce qui reste du ruban de
+    /// lancement — la trajectoire de la mission part maintenant du sol elle-même,
+    /// et une seule courbe vaut mieux que deux qui se recouvrent.
+    private let padFlare = SCNNode()
+    /// Reprise après l'ascension, 0 à 1. Le déroulé part exactement à la vitesse
+    /// de sortie de l'ascension, puis monte en régime : sans ça, la capsule
+    /// passait de 0,12 rad/s sur son arc à 2,9 rad/s sur l'orbite de parking —
+    /// un facteur vingt-quatre en une image.
+    private var missionCoastEase = 0.0
+    /// Rapport entre la vitesse de sortie de l'ascension et le régime de croisière
+    private var missionCoastFloor = 1.0
+    /// Durée de la montée en régime, et du repli de la caméra sur la trajectoire
+    /// Durée de la montée en régime. Elle couvre le premier tiers de l'orbite de
+    /// parking : le vaisseau boucle son tour de Terre pendant que le temps prend
+    /// sa vitesse de croisière, et tout est en régime bien avant l'allumage.
+    static let COAST_RAMP = 6.0
+    /// Exposant de l'ascension d'un vol habité : > 1, donc elle accélère, et sa
+    /// vitesse de sortie vaut ce même facteur fois sa vitesse moyenne.
+    static let ASCENT_EASE = 2.0
+    /// Avancée de l'ascension à laquelle le panache commence à s'éteindre
+    static let PLUME_OUT = 0.55
+    @Published var missionBeatLabel = ""
+    @Published var playbackPaused = false
+    /// Vitesse du rejeu. Elle porte aussi les haptiques : à ×4, le grondement du
+    /// décollage dure le quart du temps, sinon il déborderait sur la croisière.
+    @Published var playbackSpeed = 1.0
+    static let PLAYBACK_SPEEDS = [1.0, 2.0, 4.0]
+
+    /// La mission habitée en cours de sélection — c'est elle que pilote le
+    /// contrôleur, qu'elle soit en train de se jouer ou à l'arrêt.
+    var crewedSelection: Mission? {
+        guard case .mission(let m) = selected, m.spec.crewed != nil else { return nil }
+        return m
+    }
+    var playbackIsRunning: Bool { playingMission != nil && !playbackPaused }
 
     // Satellites
     let satelliteOrbits = SCNNode()
@@ -516,6 +579,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         launchArcGlow.isHidden = true
         earth.node.addChildNode(launchArcCore)
         earth.node.addChildNode(launchArcGlow)
+        let flare = SCNSphere(radius: 0.055)
+        let flareMaterial = SCNMaterial()
+        flareMaterial.lightingModel = .constant
+        flareMaterial.diffuse.contents = UIColor(red: 1, green: 0.85, blue: 0.6, alpha: 1)
+        flareMaterial.writesToDepthBuffer = false
+        flareMaterial.blendMode = .add
+        flare.materials = [flareMaterial]
+        padFlare.geometry = flare
+        padFlare.isHidden = true
+        earth.node.addChildNode(padFlare)
         let headGeometry = SCNSphere(radius: 0.012)
         let headMaterial = SCNMaterial()
         headMaterial.lightingModel = .constant
@@ -716,7 +789,13 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             if case .satellite = sel { return satelliteInfo[sel.name] ?? infoText[sel.name] }
             return infoText[sel.name]
         }
-        selectionIsSpacecraft = { if case .mission = selection { return true }; return false }()
+        // Le cartouche ne bascule début/fin que pour les sondes. Un vol habité a
+        // son contrôleur : deux façons de parcourir la même mission, dont une
+        // invisible, ne valent pas mieux qu'une seule.
+        selectionIsSpacecraft = {
+            if case .mission(let m) = selection { return m.spec.crewed == nil }
+            return false
+        }()
         switch selection {
         case .mission: lastExploreSection = .missions
         case .satellite: lastExploreSection = .satellites
@@ -796,7 +875,109 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         }
     }
 
+    /// Rejouer un vol habité : le décollage depuis son vrai pas de tir, puis la
+    /// mission jusqu'au retour. C'est la même grammaire qu'un lancement — recul,
+    /// plongée du drone, retenue, mise à feu — prolongée par le voyage.
+    func playMission(_ mission: Mission) {
+        guard let c = mission.spec.crewed else { return selectMission(mission) }
+        Haptics.shared.picked()
+        Haptics.shared.prepare()
+        stopMissionPlayback(clearSelection: false)
+        playingMission = mission
+        selectedLaunch = nil
+        setSelected(.mission(mission))
+        exploreView = .none
+        lastExploreSection = .missions
+        playedBeats = 0
+        missionCoastClock = 0
+        missionCoastEase = 0
+        missionCoastFloor = 1
+        missionBeatLabel = ""
+        playbackPaused = false
+        // Le décollage se joue à l'échelle de la seconde : la timeline se cale
+        // sur la date de tir et s'y arrête.
+        let launchDay = c.launchDay
+        dateTransition = nil
+        timelineVelocity = 0
+        edgeDirection = 0
+        day = launchDay
+        if dayRange > 100 { setDayRange(100, short: "J") }
+        timelineCenter = restCenter(day)
+        handleTop = restTop(day)
+        handleTopPercent = handleTop
+        updateDateText(force: true)
+
+        padFlare.position = SCNVector3(Astro.geoToLocal(
+            lat: c.site.lat, lon: c.site.lon, radius: Astro.EARTH_RADIUS * 0.995))
+        padFlare.isHidden = true
+        launchClock = 0
+        launchPhase = .arc
+        launchProgressShown = -1
+        launchAscentProgress = 0
+        launchFocusBlend = 0
+        launchFocusBlendVelocity = 0
+        launchDroneReleased = false
+        launchHoldClock = 0
+
+        // Visée : même cadrage oblique que pour un lancement, le pas de tir dans
+        // la moitié haute et la montée vers le haut de l'écran.
+        let normal = simd_normalize(Astro.geoToLocal(lat: c.site.lat, lon: c.site.lon, radius: 1))
+        let arrival = earthTilt * simd_quatd(angle: Astro.gmst(launchDay), axis: SIMD3(0, 1, 0))
+        let heading = arrival.act(normal)
+        launchAimAz = atan2(heading.x, heading.z) + 0.22
+        launchAimElev = max(-1.1, min(1.1, asin(max(-1, min(1, heading.y))) - 0.52))
+        goalDist = Self.LAUNCH_PULLBACK
+        aimUpright(launchAimAz, launchAimElev)
+        zoomWaitsForLevel = false
+    }
+
+    /// Lecture / pause. À l'arrêt, la lecture repart du pas de tir : un vol
+    /// habité n'a pas de « reprendre » à mi-course une fois terminé.
+    func playbackToggle() {
+        guard let mission = crewedSelection else { return }
+        if playingMission == nil { return playMission(mission) }
+        playbackPaused.toggle()
+        Haptics.shared.picked()
+    }
+
+    /// Revenir au décollage : la séquence entière se rejoue.
+    func playbackRestart() {
+        guard let mission = crewedSelection else { return }
+        playMission(mission)
+    }
+
+    /// Aller à la fin : la mission accomplie, trajectoire entière à l'écran.
+    func playbackToEnd() {
+        guard let mission = crewedSelection, let c = mission.spec.crewed else { return }
+        Haptics.shared.picked()
+        stopMissionPlayback(clearSelection: false)
+        let end = c.launchDay + c.days
+        animateDate(to: end, top: restTop(end), center: restCenter(end))
+        if let last = crewedBeats(c).last { announce(last.label) }
+    }
+
+    /// Vitesse suivante, en boucle.
+    func playbackCycleSpeed() {
+        Haptics.shared.picked()
+        let speeds = Self.PLAYBACK_SPEEDS
+        let index = speeds.firstIndex(of: playbackSpeed) ?? 0
+        playbackSpeed = speeds[(index + 1) % speeds.count]
+    }
+
+    /// Sortir du rejeu : dès qu'on touche à la timeline ou qu'on choisit autre chose.
+    func stopMissionPlayback(clearSelection: Bool = true) {
+        guard playingMission != nil else { return }
+        playingMission = nil
+        playedBeats = 0
+        playbackPaused = false
+        missionBeatLabel = ""
+        padFlare.isHidden = true
+        launchShake = 0
+        if clearSelection, case .mission = selected { setSelected(selected) }
+    }
+
     func selectMission(_ mission: Mission) {
+        stopMissionPlayback(clearSelection: false)
         Haptics.shared.picked()
         // Sonde hors de sa période : on cale la date sur sa borne, sinon il n'y a rien à voir
         let bounds = missionDayRange(mission.spec)
@@ -815,7 +996,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             if dayRange > wanted.0 { setDayRange(wanted.0, short: wanted.1) }
         }
         if targetDay != day {
-            animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
+            animateDate(to: targetDay, top: restTop(targetDay), center: restCenter(targetDay))
         }
         let parentPos = mission.spec.parent.flatMap { name in
             planets.first { $0.spec.name == name }.map { planetPosition($0.spec, day: targetDay) }
@@ -872,7 +1053,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         launchDroneReleased = false
         launchHoldClock = 0
         let targetDay = Astro.day(from: launch.date)
-        animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
+        animateDate(to: targetDay, top: restTop(targetDay), center: restCenter(targetDay))
         // Le globe aura tourné d'ici la date de tir : on vise son orientation d'arrivée
         let arrival = earthTilt * simd_quatd(angle: Astro.gmst(targetDay), axis: SIMD3(0, 1, 0))
         let heading = arrival.act(normal)
@@ -1289,18 +1470,19 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         setSelected(selection)
     }
 
-    // Cartouche : bascule début/fin de mission pour une sonde sélectionnée
+    // Cartouche : bascule début/fin de mission pour une sonde sélectionnée.
+    // Les vols habités en sont exclus — c'est le contrôleur qui les parcourt.
     func infoCardTapped() {
-        guard case .mission(let mission) = selected else { return }
+        guard case .mission(let mission) = selected, mission.spec.crewed == nil else { return }
         timelineVelocity = 0
         let bounds = missionDayRange(mission.spec)
         if missionDateEndpoint == "start" {
             let targetDay = bounds.first
-            animateDate(to: targetDay, top: 0, center: targetDay + dayRange / 2)
+            animateDate(to: targetDay, top: restTop(targetDay), center: restCenter(targetDay))
             missionDateEndpoint = "end"
         } else {
             let targetDay = bounds.last
-            animateDate(to: targetDay, top: 100, center: targetDay - dayRange / 2)
+            animateDate(to: targetDay, top: restTop(targetDay), center: restCenter(targetDay))
             missionDateEndpoint = "start"
         }
     }
@@ -1320,7 +1502,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
     func goToToday() {
         let targetDay = Astro.todayDay
-        animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
+        animateDate(to: targetDay, top: restTop(targetDay), center: restCenter(targetDay))
     }
 
     private var dragStartTop = 50.0
@@ -1330,12 +1512,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     /// Vrai de la sélection du lancement à la fin de l'ascension : la date est
     /// verrouillée sur celle du tir, et le drone garde la main sur le cadrage.
     private var launchSequenceRunning: Bool {
-        selectedLaunch != nil && !launchArcPoints.isEmpty && launchAscentProgress < 1
+        if playingMission != nil { return launchAscentProgress < 1 }
+        return selectedLaunch != nil && !launchArcPoints.isEmpty && launchAscentProgress < 1
     }
 
     func timelineDragBegan() {
         guard !launchSequenceRunning else { return Haptics.shared.refused() }
         Haptics.shared.grabbed()
+        // Reprendre la timeline reprend la main sur le déroulé : le rejeu
+        // s'arrête là où il en est, la trajectoire tracée reste affichée.
+        stopMissionPlayback(clearSelection: false)
         launchDroneReleased = true
         dateTransition = nil
         timelineVelocity = 0
@@ -1375,14 +1561,14 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         edgeDirection = 0
         dayRange = range
         timelineCenter = restCenter(day)
-        handleTop = Self.HANDLE_REST
+        handleTop = restTop(day)
         handleTopPercent = handleTop
         scaleShort = short
         updateDateText(force: true)
     }
 
     func jump(toDay targetDay: Double) {
-        animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
+        animateDate(to: targetDay, top: restTop(targetDay), center: restCenter(targetDay))
     }
 
     private var lastDateText = ""
@@ -1501,15 +1687,22 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         // Sondes
         for mission in missions {
             let isSelected = selected == .mission(mission)
+            let playing = playingMission === mission
             let visible = (isSelected || showAllMissions) && missionIsValid(mission.spec, day: day)
             mission.node.isHidden = !visible
+            // Rien de spécial pendant l'ascension : la trajectoire d'un vol habité
+            // part du pas de tir, la sonde n'a qu'à la suivre.
             let parentPos = mission.spec.parent.flatMap { name in
                 planets.first { $0.spec.name == name }?.node.position.simd3
             }
             mission.node.position = SCNVector3(missionPosition(mission.spec, day: day, parentPosition: parentPos))
             mission.node.eulerAngles.y += Float(dt * 0.8)
-            // taille écran constante : lisible en vue système comme collée à une planète
-            let scale = Float(max(0.06, min(3, dist * 0.0059)) * (isSelected ? 1.35 : 1))
+            // Taille écran constante. Le plancher de 0,06 existe pour qu'une sonde
+            // lointaine ne disparaisse pas ; en vue drone, à 0,9 du pas de tir, il
+            // en ferait un rocher posé sur le pas de tir. On le lève pendant le
+            // rejeu — la sonde grossit alors au rythme où la caméra s'écarte.
+            let screen = min(3, dist * 0.0059)
+            let scale = Float((playing ? screen : max(0.06, screen)) * (isSelected ? 1.35 : 1))
             mission.node.scale = SCNVector3(scale, scale, scale)
             guard isSelected, visible else {
                 mission.trail.update(points: [], opacity: 0)
@@ -1520,12 +1713,13 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 mission.lastTrailDay = day
                 let bounds = missionDayRange(mission.spec)
                 let endDay = min(day, bounds.last)
+                let originDay = bounds.first
                 // Une sonde en orbite ne montre que sa dernière révolution — et
                 // un vol en orbite basse aussi : les cent quarante-huit tours
                 // d'Apollo-Soyouz repassent tous par le même cercle.
                 var cycle = mission.spec.orbit.map { $0[3] * 365.25 } ?? mission.spec.local.map { 1 / $0[1] } ?? 0
-                if case .earthOrbit(_, let period, _)? = mission.spec.crewed?.profile { cycle = period / 1440 }
-                let startDay = max(bounds.first, cycle > 0 ? endDay - cycle * 1.15 : -1e9)
+                if case .earthOrbit(_, let period)? = mission.spec.crewed?.profile { cycle = period / 1440 }
+                let startDay = max(originDay, cycle > 0 ? endDay - cycle * 1.15 : -1e9)
                 if endDay >= startDay {
                     // Une boucle lunaire enroulée huit fois demande plus de points
                     // qu'une ellipse d'une décennie.
@@ -1534,14 +1728,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                     points.reserveCapacity(samples)
                     // Vol lunaire : les points sont répartis par phase, sinon
                     // l'orbite de parking se réduit à un triangle.
-                    let lunarSampling: (crewed: CrewedSpec, end: Double)? = {
+                    let lunarSampling: (crewed: CrewedSpec, from: Double, to: Double)? = {
                         guard let c = mission.spec.crewed, case .lunar = c.profile else { return nil }
-                        return (c, crewedSampleProgress(c, day: endDay))
+                        return (c, crewedSampleProgress(c, day: originDay),
+                                crewedSampleProgress(c, day: endDay))
                     }()
                     for k in 0..<samples {
                         let u = Double(k) / Double(samples - 1)
-                        let sampleDay = lunarSampling.map { crewedSampleDay($0.crewed, at: u * $0.end) }
-                            ?? startDay + (endDay - startDay) * u
+                        let sampleDay = lunarSampling.map {
+                            crewedSampleDay($0.crewed, at: $0.from + ($0.to - $0.from) * u)
+                        } ?? startDay + (endDay - startDay) * u
                         let parent = mission.spec.parent.flatMap { name in
                             planets.first { $0.spec.name == name }.map { planetPosition($0.spec, day: sampleDay) }
                         }
@@ -1680,8 +1876,13 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             }
         }
 
+        // Rejeu d'un vol habité : le décollage, puis la mission jusqu'au retour
+        if let mission = playingMission, let c = mission.spec.crewed {
+            updateMissionPlayback(mission, c, dt: dt)
+        }
+
         // Lancement : une seule ascension, puis la trajectoire reste affichée
-        if selectedLaunch == nil { launchShake = 0 }
+        if selectedLaunch == nil && playingMission == nil { launchShake = 0 }
         if selectedLaunch != nil, !launchArcPoints.isEmpty {
             // Le drone accroche la fusée au moment de plonger et ne la lâche plus :
             // le plan se referme sur elle, pas sur le globe.
@@ -1719,7 +1920,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 launchShake = Self.LAUNCH_SHAKE * pow(min(1, launchHoldClock / Self.LAUNCH_HOLD), 2.2)
                 if launchHoldClock >= Self.LAUNCH_HOLD {
                     launchPhase = .flight
-                    Haptics.shared.launchRumble(duration: Self.LAUNCH_RISE)
+                    Haptics.shared.launchRumble(duration: Self.LAUNCH_RISE / playbackSpeed)
                 }
             case .flight:
                 launchClock += dt // mise à feu : la caméra est en place
@@ -1818,7 +2019,28 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
         // Cible de la caméra
         var focusIdentity: CameraFocusIdentity?
-        if case .mission(let mission) = selected, !mission.node.isHidden, mission.trailRadius > 0 {
+        if let mission = playingMission {
+            // Vue drone : le pivot quitte le centre du globe pour le pas de tir,
+            // puis suit le vaisseau. Une fois en orbite, le cadrage se déplie sur
+            // la trajectoire au même rythme que le déroulé monte en régime : le
+            // mouvement de caméra et l'accélération du temps sont un seul geste.
+            let craft = mission.node.position.simd3
+            let hub = earth.node.position.simd3
+            let onCraft = hub + (craft - hub) * launchFocusBlend
+            // Décélération seule : la caméra reprend le repli à la vitesse où
+            // l'ascension l'a laissée, puis se pose. Une courbe en S repartirait
+            // de zéro — c'est exactement le temps mort qu'on cherche à supprimer.
+            let e = missionCoastEase
+            let ease = 1 - (1 - e) * (1 - e)
+            if launchAscentProgress >= 1, mission.trailRadius > 0, ease > 0 {
+                let wide = min(560, max(3, frameDistance(radius: mission.trailRadius) * spacecraftZoomScale))
+                focusTarget = onCraft + (mission.trailCenter - onCraft) * ease
+                goalDist = Self.LAUNCH_DIVE_DIST + (wide - Self.LAUNCH_DIVE_DIST) * ease
+            } else {
+                focusTarget = onCraft
+            }
+            focusIdentity = .selection(.mission(mission))
+        } else if case .mission(let mission) = selected, !mission.node.isHidden, mission.trailRadius > 0 {
             focusTarget = mission.trailCenter // on cadre la trajectoire parcourue
             focusIdentity = .selection(.mission(mission))
             goalDist = min(560, max(3, frameDistance(radius: mission.trailRadius) * spacecraftZoomScale))
@@ -1887,6 +2109,191 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         if uiDirty {
             let top = handleTop
             DispatchQueue.main.async { self.handleTopPercent = top }
+        }
+    }
+
+    // MARK: Rejeu d'un vol habité
+
+    /// Le décollage réutilise mot pour mot la grammaire des lancements — recul,
+    /// plongée du drone, retenue moteurs, mise à feu. Ce qui suit lui est propre :
+    /// la mission se déroule ensuite sur ses jours réels, jalonnée par ses
+    /// allumages, jusqu'au retour.
+    private func updateMissionPlayback(_ mission: Mission, _ c: CrewedSpec, dt rawDt: Double) {
+        guard !playbackPaused else { return }
+        let dt = rawDt * playbackSpeed
+        let following = launchPhase != .arc && !launchDroneReleased
+        launchFocusBlend = smoothDamp(
+            launchFocusBlend, toward: following ? 1 : 0,
+            velocity: &launchFocusBlendVelocity, smoothTime: 0.6, deltaTime: dt
+        )
+        switch launchPhase {
+        case .arc:
+            launchShake = 0
+            goalDist = Self.LAUNCH_PULLBACK
+            if launchAimResidual < Self.LAUNCH_AIM_HANDOFF { launchPhase = .dive }
+        case .dive:
+            goalDist = Self.LAUNCH_PULLBACK
+                + (Self.LAUNCH_DRONE_DIST - Self.LAUNCH_PULLBACK) * launchFocusBlend
+            if launchFocusBlend > 0.97, abs(dist - goalDist) < 0.15 * goalDist {
+                launchPhase = .hold
+                launchHoldClock = 0
+                Haptics.shared.touchdown()
+                Haptics.shared.spoolUp(duration: Self.LAUNCH_HOLD / playbackSpeed)
+            }
+        case .hold:
+            goalDist = Self.LAUNCH_PULLBACK
+                + (Self.LAUNCH_DRONE_DIST - Self.LAUNCH_PULLBACK) * launchFocusBlend
+            launchHoldClock += dt
+            launchShake = Self.LAUNCH_SHAKE * pow(min(1, launchHoldClock / Self.LAUNCH_HOLD), 2.2)
+            if launchHoldClock >= Self.LAUNCH_HOLD {
+                launchPhase = .flight
+                Haptics.shared.launchRumble(duration: Self.LAUNCH_RISE)
+                announce("Décollage")
+                playedBeats = 1
+            }
+        case .flight:
+            launchClock += dt
+            launchShake = max(0, launchShake - dt * Self.LAUNCH_SHAKE)
+        }
+
+        // Un lancement s'arrondit en fin d'ascension : la séquence se termine là,
+        // et la courbe en S lui donne sa chute. Ici elle n'a pas de sens — la
+        // mission continue. Le vaisseau et la caméra accélèrent donc de bout en
+        // bout, et sortent de l'ascension à leur vitesse maximale, celle que le
+        // déroulé reprend.
+        let raw = min(1, max(0, launchClock) / Self.LAUNCH_RISE)
+        let progress = pow(raw, Self.ASCENT_EASE)
+        launchAscentProgress = progress
+        updatePadFlare()
+        if launchPhase == .flight, progress < 1 {
+            goalDist = Self.LAUNCH_DRONE_DIST
+                + (Self.LAUNCH_DIVE_DIST - Self.LAUNCH_DRONE_DIST) * progress
+            // L'ascension est une portion de la mission comme une autre : c'est la
+            // date qui avance, et la sonde comme son tracé la suivent. Une seule
+            // courbe, du sol au retour.
+            day = c.launchDay + crewedAscentDays(c) * progress
+            parkTimeline()
+        }
+
+        guard progress >= 1 else { return }
+
+        // La mission se déroule. Le temps n'y coule pas uniformément : il suit la
+        // répartition par phase du tracé, sinon trois jours de croisière
+        // mangeraient tout le plan et les boucles lunaires passeraient en un éclair.
+        let isLunar: Bool = { if case .lunar = c.profile { return true }; return false }()
+        // Passage de relais : le déroulé reprend exactement là où l'ascension
+        // s'est arrêtée — 24° d'orbite déjà parcourus — sinon la capsule saute
+        // en arrière au moment où la maquette prend la place de la fusée.
+        let handoff = ascentEndDay(c)
+        func dayAt(_ k: Double) -> Double {
+            isLunar ? crewedSampleDay(c, at: k) : c.launchDay + c.days * k
+        }
+        if missionCoastClock == 0 {
+            let k0 = isLunar ? crewedSampleProgress(c, day: handoff)
+                             : (handoff - c.launchDay) / max(1e-9, c.days)
+            missionCoastClock = min(Self.MISSION_COAST, k0 * Self.MISSION_COAST)
+            // Les deux vitesses sont *mesurées*, pas déduites : la vitesse réelle
+            // du vaisseau sur sa dernière fraction de seconde d'ascension, et
+            // celle qu'aurait le déroulé à plein régime au même point. Leur
+            // rapport donne le régime de départ. Toute estimation analytique
+            // laissait un écart — et un écart s'entend.
+            let step = 0.02 // s
+            // Vitesse de sortie : la date avance de ASCENT_EASE × durée / RISE par
+            // seconde à la toute fin de l'ascension (dérivée de day = launchDay +
+            // ascent · progress^ASCENT_EASE).
+            let exitDayRate = Self.ASCENT_EASE * crewedAscentDays(c) / Self.LAUNCH_RISE
+            let ascentSpeed = simd_length(
+                crewedLocalPosition(c, day: handoff)
+                    - crewedLocalPosition(c, day: handoff - exitDayRate * step)
+            ) / step
+
+            let k1 = min(1, missionCoastClock / Self.MISSION_COAST)
+            let dk = 0.0005
+            let here = crewedLocalPosition(c, day: dayAt(k1))
+            let next = crewedLocalPosition(c, day: dayAt(min(1, k1 + dk)))
+            let coastSpeed = simd_length(next - here) / dk / Self.MISSION_COAST
+            missionCoastFloor = max(0.004, min(1, ascentSpeed / max(1e-9, coastSpeed)))
+        }
+        missionCoastEase = min(1, missionCoastEase + dt / Self.COAST_RAMP)
+        // Montée en régime géométrique. Il y a un facteur vingt entre la vitesse
+        // de sortie de l'ascension et le régime de croisière : interpolé
+        // linéairement, l'essentiel du gain tombe au milieu de la rampe et se lit
+        // comme une secousse. En doublant à intervalle constant, l'accélération
+        // est la même à chaque instant — c'est ce qu'on perçoit comme fluide.
+        missionCoastClock += dt * pow(missionCoastFloor, 1 - missionCoastEase)
+        let k = min(1, missionCoastClock / Self.MISSION_COAST)
+        let target = isLunar ? crewedSampleDay(c, at: k) : c.launchDay + c.days * k
+        day = target
+        parkTimeline()
+        // La traînée d'ascension s'efface : 400 km ne pèsent plus rien une fois
+        // la Lune dans le cadre.
+        launchArcCore.isHidden = true
+        launchArcGlow.isHidden = true
+
+        // Jalons : ce que le cartouche annonce, et ce que la main sent
+        let beats = crewedBeats(c)
+        while playedBeats < beats.count, day >= beats[playedBeats].day {
+            let beat = beats[playedBeats]
+            playedBeats += 1
+            if beat.kind == .liftoff { continue } // déjà joué à la mise à feu
+            announce(beat.label)
+            switch beat.kind {
+            case .burn: Haptics.shared.burn()
+            case .brake: Haptics.shared.brake()
+            case .splashdown: Haptics.shared.splashdown()
+            case .coast, .liftoff: Haptics.shared.selected()
+            }
+        }
+        if k >= 1 {
+            // Fin du rejeu : la trajectoire complète reste à l'écran, la timeline
+            // rend la main.
+            playingMission = nil
+            padFlare.isHidden = true
+            launchShake = 0
+        }
+    }
+
+    /// Remettre la timeline au repos sur la date courante : la fenêtre et le
+    /// cartouche vont ensemble, sinon le cartouche annonce une date à un endroit
+    /// de la piste qui en désigne une autre.
+    private func parkTimeline() {
+        timelineCenter = restCenter(day)
+        handleTop = restTop(day)
+        // Appelé depuis la boucle de rendu : la publication passe par le thread
+        // principal, comme partout ailleurs pour cette propriété.
+        let top = handleTop
+        if Thread.isMainThread { handleTopPercent = top }
+        else { DispatchQueue.main.async { self.handleTopPercent = top } }
+        updateDateText()
+    }
+
+    /// Le halo au pas de tir : il enfle sous la poussée retenue, éclate à la mise
+    /// à feu, puis s'éteint pendant que le vaisseau prend de l'altitude. Il a
+    /// disparu bien avant que la trajectoire ne quitte le voisinage du sol.
+    private func updatePadFlare() {
+        let heat: Double
+        switch launchPhase {
+        case .arc, .dive: heat = 0
+        case .hold: heat = 0.5 * pow(min(1, launchHoldClock / Self.LAUNCH_HOLD), 1.6)
+        case .flight: heat = max(0, 1 - launchAscentProgress / Self.PLUME_OUT)
+        }
+        padFlare.isHidden = heat <= 0.012
+        guard !padFlare.isHidden else { return }
+        padFlare.opacity = CGFloat(min(1, heat * 1.3))
+        let size = Float(0.55 + heat * 1.7)
+        padFlare.scale = SCNVector3(size, size, size)
+    }
+
+    /// Le jour de mission atteint à la fin de l'ascension.
+    private func ascentEndDay(_ c: CrewedSpec) -> Double {
+        c.launchDay + crewedAscentDays(c)
+    }
+
+    /// Le chapitre en cours, sous le nom de la mission.
+    private func announce(_ label: String) {
+        DispatchQueue.main.async {
+            self.missionBeatLabel = label
+            self.selectionSub = label
         }
     }
 

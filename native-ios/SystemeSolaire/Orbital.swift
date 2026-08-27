@@ -62,6 +62,9 @@ enum Astro {
     // Voisinage terrestre : altitudes comprimées en log, cohérentes avec la Lune de la scène
     static let ORBIT_H = 400.0, MOON_KM = 384_400.0, EARTH_KM = 6371.0
     static let EARTH_RADIUS = 1.2   // taille de la Terre dans la scène
+    /// Inclinaison de l'axe terrestre. Le moteur oriente le globe avec ;
+    /// une trajectoire qui part d'un pas de tir en a besoin aussi.
+    static let earthTilt = simd_quatd(angle: -23.44 * Double.pi / 180, axis: SIMD3(1, 0, 0))
     static let MOON_SCENE_RADIUS = 3.1
     static let ORBIT_SCALE = (MOON_SCENE_RADIUS - EARTH_RADIUS) / log1p((MOON_KM - EARTH_KM) / ORBIT_H)
 
@@ -158,16 +161,28 @@ struct CrewedSpec {
     let launchDay: Double
     /// durée de la mission, en jours
     let days: Double
+    /// le vrai pas de tir : c'est de là que part la trajectoire
+    let site: LaunchSite
+    /// inclinaison de l'orbite initiale (°). Elle ne peut pas être inférieure à
+    /// la latitude du pas de tir — on ne lance pas vers le sud de l'équateur
+    /// depuis la Floride.
+    let inclination: Double
     let profile: CrewedProfile
     /// équipage affiché sous le nom
     let crew: String
 }
 
+struct LaunchSite {
+    let name: String
+    let lat: Double
+    let lon: Double
+}
+
 enum CrewedProfile {
-    /// Orbite terrestre : altitude (km), période (minutes), inclinaison (°).
+    /// Orbite terrestre : altitude (km), période (minutes).
     /// La trace ne montre que la dernière révolution — les suivantes se
     /// superposeraient exactement à celle-là.
-    case earthOrbit(altitude: Double, period: Double, inclination: Double)
+    case earthOrbit(altitude: Double, period: Double)
     /// Vol lunaire. `outbound` / `around` / `inbound` sont les durées réelles en
     /// jours des trois temps du voyage ; `loops` le nombre de révolutions
     /// *dessinées* autour de la Lune (0,5 pour un survol en retour libre) —
@@ -177,14 +192,56 @@ enum CrewedProfile {
 }
 
 enum Crewed {
-    /// Orbite de parking avant l'injection translunaire (Apollo : 185 km, 32,5°)
+    /// Orbite de parking avant l'injection translunaire (Apollo : 185 km)
     static let PARKING_KM = 6371.0 + 185
-    static let PARKING_INCLINATION = 32.5 * Astro.DEG
     static let PARKING_PERIOD = 88.2 / 1440       // jours
     /// Interface de rentrée : 122 km d'altitude
     static let ENTRY_KM = 6371.0 + 122
+    /// Angle parcouru au sol pendant l'ascension. Un lanceur bascule vite mais ne
+    /// fait pas un quart de tour avant d'être en orbite. C'est aussi le point où
+    /// le déroulé de la mission reprend : l'ascension et l'orbite doivent se
+    /// raccorder sur le même point, sinon la capsule saute au passage de relais.
+    static let ASCENT_DOWNRANGE = 0.42
     /// Rayon de la Lune telle que la scène la dessine
     static var moonSize: Double { moonSpecs["Terre"]?.first?.size ?? 0.42 }
+}
+
+/// Repère de l'orbite initiale, déduit du pas de tir et de la date de tir.
+/// `u` pointe vers le pas de tir à l'instant du décollage, `v` vers là où le
+/// lanceur file. L'azimut de tir vient de la relation classique
+/// cos i = cos φ · sin A : c'est elle qui fait qu'on tire plein est depuis la
+/// Floride pour une orbite à 28°, et vers le nord-est depuis Baïkonour.
+/// La trajectoire part donc du vrai pas de tir, et l'ascension s'y raccorde.
+func crewedFrame(_ c: CrewedSpec) -> (u: SIMD3<Double>, v: SIMD3<Double>) {
+    let spin = simd_quatd(angle: Astro.gmst(c.launchDay), axis: SIMD3(0, 1, 0))
+    let toScene = Astro.earthTilt * spin
+    let u = simd_normalize(toScene.act(Astro.geoToLocal(lat: c.site.lat, lon: c.site.lon, radius: 1)))
+    let north = simd_normalize(Astro.earthTilt.act(SIMD3(0, 1, 0)))
+    var east = simd_cross(north, u)
+    if simd_length_squared(east) < 1e-9 { east = simd_cross(SIMD3(1, 0, 0), u) }
+    east = simd_normalize(east)
+    let localNorth = simd_normalize(simd_cross(u, east))
+    let cosPhi = max(1e-6, cos(c.site.lat * Astro.DEG))
+    let sinAzimuth = max(-1, min(1, cos(c.inclination * Astro.DEG) / cosPhi))
+    let azimuth = asin(sinAzimuth)
+    return (u, simd_normalize(east * sin(azimuth) + localNorth * cos(azimuth)))
+}
+
+/// Durée de l'ascension, en jours de mission. Elle vaut exactement le temps que
+/// met l'orbite initiale à parcourir `ASCENT_DOWNRANGE` : la montée débouche
+/// donc sur l'orbite au bon endroit *et* au bon instant, sans raccord à négocier.
+func crewedAscentDays(_ c: CrewedSpec) -> Double {
+    let period: Double = {
+        if case .earthOrbit(_, let p) = c.profile { return p / 1440 }
+        return Crewed.PARKING_PERIOD
+    }()
+    return Crewed.ASCENT_DOWNRANGE / Astro.TAU * period
+}
+
+/// Point de l'orbite initiale, `angle` compté depuis le pas de tir.
+func crewedOrbitPoint(_ c: CrewedSpec, radius: Double, angle: Double) -> SIMD3<Double> {
+    let frame = crewedFrame(c)
+    return (frame.u * cos(angle) + frame.v * sin(angle)) * radius
 }
 
 /// Point d'une orbite circulaire inclinée, dans le repère de son primaire.
@@ -249,7 +306,12 @@ private func crewedPhases(_ c: CrewedSpec) -> [(weight: Double, days: Double)] {
         return [(1, c.days)]
     }
     let park = max(0.02, c.days - (outbound + around + inbound))
-    return [(110, park), (190, outbound), (max(40, loops * 70), around), (190, inbound)]
+    // L'orbite de parking pèse plus lourd que sa durée : une révolution et demie
+    // en quatre secondes se lisait comme une accélération brutale juste après
+    // l'ascension. Elle a maintenant le temps de se voir.
+    let ascent = crewedAscentDays(c)
+    return [(70, ascent), (165, max(0, park - ascent)), (190, outbound),
+            (max(40, loops * 70), around), (190, inbound)]
 }
 
 /// Jour de la mission pour une fraction `k` du tracé (0 = décollage, 1 = fin).
@@ -285,19 +347,83 @@ func crewedSampleProgress(_ c: CrewedSpec, day d: Double) -> Double {
     return 1
 }
 
+// MARK: Jalons
+
+/// Un temps fort de la mission : ce que le cartouche annonce, et ce que la main
+/// sent. Un vol habité n'est pas une courbe continue mais une suite d'allumages.
+struct CrewedBeat {
+    let day: Double
+    let label: String
+    let kind: Kind
+    enum Kind {
+        case liftoff    // décollage
+        case burn       // allumage franc : TLI, TEI, désorbitation
+        case brake      // freinage : mise en orbite lunaire
+        case coast      // rien à sentir, on change juste de chapitre
+        case splashdown // retour au sol ou à la mer
+    }
+}
+
+/// Le découpage d'une mission en chapitres, aux dates réelles de ses manœuvres.
+func crewedBeats(_ c: CrewedSpec) -> [CrewedBeat] {
+    let start = c.launchDay
+    switch c.profile {
+    case .earthOrbit(_, let period):
+        let deorbit = start + max(0, c.days - period / 1440 * 0.75)
+        return [
+            CrewedBeat(day: start, label: "Décollage", kind: .liftoff),
+            CrewedBeat(day: start + 0.006, label: "En orbite", kind: .coast),
+            CrewedBeat(day: deorbit, label: "Désorbitation", kind: .burn),
+            CrewedBeat(day: start + c.days, label: "Retour", kind: .splashdown),
+        ]
+    case .lunar(let outbound, let around, let inbound, let loops, _):
+        let park = max(0.02, c.days - (outbound + around + inbound))
+        let flyby = loops <= 0.75
+        return [
+            CrewedBeat(day: start, label: "Décollage", kind: .liftoff),
+            CrewedBeat(day: start + 0.006, label: "Orbite de parking", kind: .coast),
+            CrewedBeat(day: start + park, label: "Injection translunaire", kind: .burn),
+            CrewedBeat(day: start + park + outbound,
+                       label: flyby ? "Survol de la Lune" : "Mise en orbite lunaire",
+                       kind: flyby ? .coast : .brake),
+            CrewedBeat(day: start + park + outbound + around,
+                       label: flyby ? "Retour libre" : "Injection trans-Terre",
+                       kind: flyby ? .coast : .burn),
+            CrewedBeat(day: start + c.days, label: "Amerrissage", kind: .splashdown),
+        ]
+    }
+}
+
 /// Position d'un vaisseau habité, dans le repère de la Terre.
 func crewedLocalPosition(_ c: CrewedSpec, day d: Double) -> SIMD3<Double> {
     let t = max(0, min(c.days, d - c.launchDay))
+    let orbitRadius: Double = {
+        if case .earthOrbit(let altitude, _) = c.profile {
+            return Astro.orbitSceneRadius(km: 6371 + altitude)
+        }
+        return Astro.orbitSceneRadius(km: Crewed.PARKING_KM)
+    }()
+    // Ascension. La trajectoire d'un vol habité part du sol, au vrai pas de tir :
+    // c'est une seule courbe du décollage au retour, pas une trajectoire orbitale
+    // à laquelle on aurait recollé un lancement.
+    let ascent = crewedAscentDays(c)
+    if t < ascent {
+        let u = t / ascent
+        // Vertical d'abord, basculement ensuite : l'altitude monte vite, la
+        // distance au sol se rattrape en fin de course.
+        return crewedOrbitPoint(
+            c,
+            radius: Astro.EARTH_RADIUS + (orbitRadius - Astro.EARTH_RADIUS) * pow(u, 0.62),
+            angle: Crewed.ASCENT_DOWNRANGE * pow(u, 1.9)
+        )
+    }
     switch c.profile {
-    case .earthOrbit(let altitude, let period, let inclination):
-        let radius = Astro.orbitSceneRadius(km: 6371 + altitude)
-        let angle = t / (period / 1440) * Astro.TAU
-        return inclinedCircle(radius: radius, angle: angle,
-                              inclination: inclination * Astro.DEG, node: 0.9)
+    case .earthOrbit(_, let period):
+        return crewedOrbitPoint(c, radius: orbitRadius, angle: t / (period / 1440) * Astro.TAU)
 
     case .lunar(let outbound, let around, let inbound, let loops, let periluneKm):
         let park = max(0.02, c.days - (outbound + around + inbound))
-        let rPark = Astro.orbitSceneRadius(km: Crewed.PARKING_KM)
+        let rPark = orbitRadius
         let rEntry = Astro.orbitSceneRadius(km: Crewed.ENTRY_KM)
         // Le plan de l'orbite lunaire est celui du plan de vol : incliné sur le
         // plan Terre-Lune, ce qui fait passer la boucle derrière la Lune.
@@ -315,13 +441,10 @@ func crewedLocalPosition(_ c: CrewedSpec, day d: Double) -> SIMD3<Double> {
         }
         // Injection translunaire : dernier point de l'orbite de parking
         let tliAngle = park / Crewed.PARKING_PERIOD * Astro.TAU
-        let tli = inclinedCircle(radius: rPark, angle: tliAngle,
-                                 inclination: Crewed.PARKING_INCLINATION, node: 0.35)
+        let tli = crewedOrbitPoint(c, radius: rPark, angle: tliAngle)
 
         if t < park {
-            let angle = t / Crewed.PARKING_PERIOD * Astro.TAU
-            return inclinedCircle(radius: rPark, angle: angle,
-                                  inclination: Crewed.PARKING_INCLINATION, node: 0.35)
+            return crewedOrbitPoint(c, radius: rPark, angle: t / Crewed.PARKING_PERIOD * Astro.TAU)
         }
         if t < park + outbound {
             let u = (t - park) / max(1e-6, outbound)
@@ -340,8 +463,7 @@ func crewedLocalPosition(_ c: CrewedSpec, day d: Double) -> SIMD3<Double> {
         let u = (t - park - outbound - around) / max(1e-6, inbound)
         let start = earthMoonLocalPosition(day: departureDay) + lunarOffset(exitAngle)
         // Retour : la Terre a tourné, le point de rentrée n'est pas celui du départ
-        let splash = inclinedCircle(radius: rEntry, angle: tliAngle - 0.55,
-                                    inclination: Crewed.PARKING_INCLINATION, node: 0.35)
+        let splash = crewedOrbitPoint(c, radius: rEntry, angle: tliAngle - 0.55)
         // Retour : le miroir de l'aller — l'angle s'accélère en tombant vers la Terre
         let dir = slerpDirection(start, splash, 1 - coastSweep(1 - u))
         return dir * coastRadius(1 - u, from: rEntry, to: simd_length(start))

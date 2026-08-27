@@ -20,6 +20,7 @@ Le moteur 3D est embarqué dans une `WebView` React Native. La scène conserve l
 - timeline et simulation du temps ;
 - 26 sondes : trajectoires temporelles des missions actives et historiques, dont Ulysses et son orbite polaire à 79° du plan des planètes ;
 - 8 vols habités dans le port natif iOS, de Vostok 1 à Artemis II : trajectoires à l'échelle du jour dans le voisinage terrestre, profils lunaires reconstruits d'après les repères réels de chaque mission (injection translunaire, mise en orbite lunaire, retour) ;
+- rejeu d'un vol habité de bout en bout dans le port natif iOS : décollage depuis le vrai pas de tir avec vue drone et retours haptiques, puis déroulé de la mission jusqu'au retour, avec un contrôleur lecture/pause/vitesse ;
 - prochains lancements réels : API Launch Library (thespacedevs), vrais pas de tir avec leurs coordonnées, dates et statuts, cache local d'une heure et repli embarqué ;
 - trajectoires reconstruites pour Voyager 1, Voyager 2 et New Horizons : départ de la Terre, assistances gravitationnelles aux dates réelles des survols, latitude écliptique (sortie du plan après Titan pour Voyager 1, plongée sud après Neptune pour Voyager 2) et droite d'échappement calée sur le franchissement de l'héliopause ;
 - filtre séparé pour les missions historiques ;
