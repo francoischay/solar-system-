@@ -460,8 +460,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             planet.moonSystem = system
         }
 
-        // Sondes
-        for spec in missionSpecs {
+        // Sondes, puis vols habités : même maquette, même tracé — seule la
+        // trajectoire change d'échelle.
+        for spec in missionSpecs + crewedSpecs {
             let mission = Mission(spec: spec)
             let core = SCNNode(geometry: Geo.octahedron(radius: 0.75))
             let coreMaterial = SCNMaterial()
@@ -701,7 +702,9 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         case .moon(let m):
             selectionSub = "Lune de " + m.planet.spec.name
         case .mission(let m):
-            selectionSub = m.spec.valid
+            // Pour un vol habité, les dates sont déjà lisibles sur la timeline ;
+            // ce qu'on veut sous le nom, c'est qui était à bord.
+            selectionSub = m.spec.crewed?.crew ?? m.spec.valid
         case .satellite(let s):
             selectionSub = satelliteMeta(s)
         case nil:
@@ -753,7 +756,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 let radius = min(4, max(Astro.EARTH_RADIUS, orbit))
                 goalDist = max(5, frameDistance(radius: radius, margin: 1.15))
             }
-        case .mission: goalDist = 34
+        case .mission(let m): goalDist = m.spec.crewed == nil ? 34 : 11
         case .planet: goalDist = 42
         case nil: break
         }
@@ -796,13 +799,21 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     func selectMission(_ mission: Mission) {
         Haptics.shared.picked()
         // Sonde hors de sa période : on cale la date sur sa borne, sinon il n'y a rien à voir
-        let years = missionYears(mission.spec)
-        let first = Astro.dayForYear(years.start)
-        let last = Astro.dayForYear(years.end + 1) - 1
+        let bounds = missionDayRange(mission.spec)
+        let first = bounds.first
+        let last = bounds.last
         let today = Astro.todayDay
-        let targetDay = day >= first && day <= last ? day
+        var targetDay = day >= first && day <= last ? day
             : today >= first && today <= last ? today
             : day < first ? first : last
+        // Un vol habité se joue en jours, parfois en minutes : à l'échelle de
+        // l'année la mission entière tient dans l'épaisseur du curseur. On
+        // resserre la timeline, et on part du décollage.
+        if let c = mission.spec.crewed {
+            targetDay = c.launchDay
+            let wanted: (Double, String) = c.days < 0.5 ? (4.2, "H") : (100, "J")
+            if dayRange > wanted.0 { setDayRange(wanted.0, short: wanted.1) }
+        }
         if targetDay != day {
             animateDate(to: targetDay, top: Self.HANDLE_REST, center: restCenter(targetDay))
         }
@@ -1282,13 +1293,13 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     func infoCardTapped() {
         guard case .mission(let mission) = selected else { return }
         timelineVelocity = 0
-        let years = missionYears(mission.spec)
+        let bounds = missionDayRange(mission.spec)
         if missionDateEndpoint == "start" {
-            let targetDay = Astro.dayForYear(years.start)
+            let targetDay = bounds.first
             animateDate(to: targetDay, top: 0, center: targetDay + dayRange / 2)
             missionDateEndpoint = "end"
         } else {
-            let targetDay = Astro.dayForYear(years.end + 1) - 1
+            let targetDay = bounds.last
             animateDate(to: targetDay, top: 100, center: targetDay - dayRange / 2)
             missionDateEndpoint = "start"
         }
@@ -1507,17 +1518,30 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             }
             if mission.lastTrailDay != day {
                 mission.lastTrailDay = day
-                let years = missionYears(mission.spec)
-                let endDay = min(day, Astro.dayForYear(years.end + 1))
-                // Une sonde en orbite ne montre que sa dernière révolution
-                let cycle = mission.spec.orbit.map { $0[3] * 365.25 } ?? mission.spec.local.map { 1 / $0[1] } ?? 0
-                let startDay = max(Astro.dayForYear(years.start), cycle > 0 ? endDay - cycle * 1.15 : -1e9)
+                let bounds = missionDayRange(mission.spec)
+                let endDay = min(day, bounds.last)
+                // Une sonde en orbite ne montre que sa dernière révolution — et
+                // un vol en orbite basse aussi : les cent quarante-huit tours
+                // d'Apollo-Soyouz repassent tous par le même cercle.
+                var cycle = mission.spec.orbit.map { $0[3] * 365.25 } ?? mission.spec.local.map { 1 / $0[1] } ?? 0
+                if case .earthOrbit(_, let period, _)? = mission.spec.crewed?.profile { cycle = period / 1440 }
+                let startDay = max(bounds.first, cycle > 0 ? endDay - cycle * 1.15 : -1e9)
                 if endDay >= startDay {
-                    let samples = 320
+                    // Une boucle lunaire enroulée huit fois demande plus de points
+                    // qu'une ellipse d'une décennie.
+                    let samples = mission.spec.crewed != nil ? 720 : 320
                     var points: [SIMD3<Double>] = []
                     points.reserveCapacity(samples)
+                    // Vol lunaire : les points sont répartis par phase, sinon
+                    // l'orbite de parking se réduit à un triangle.
+                    let lunarSampling: (crewed: CrewedSpec, end: Double)? = {
+                        guard let c = mission.spec.crewed, case .lunar = c.profile else { return nil }
+                        return (c, crewedSampleProgress(c, day: endDay))
+                    }()
                     for k in 0..<samples {
-                        let sampleDay = startDay + (endDay - startDay) * Double(k) / Double(samples - 1)
+                        let u = Double(k) / Double(samples - 1)
+                        let sampleDay = lunarSampling.map { crewedSampleDay($0.crewed, at: u * $0.end) }
+                            ?? startDay + (endDay - startDay) * u
                         let parent = mission.spec.parent.flatMap { name in
                             planets.first { $0.spec.name == name }.map { planetPosition($0.spec, day: sampleDay) }
                         }
@@ -1607,9 +1631,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             system.group.position = system.planet.node.position
             let parentSelected = selected == .planet(system.planet)
             let moonSelected = system.moons.contains { selected == .moon($0) }
+            // Suivre Apollo 11 sans la Lune n'aurait aucun sens : c'est la seule
+            // chose vers laquelle la capsule se dirige.
+            let lunarFlight: Bool = {
+                guard system.planet === earth, case .mission(let m)? = selected,
+                      case .lunar? = m.spec.crewed?.profile else { return false }
+                return true
+            }()
             // Les lunes et leurs orbites ne surgissent pas : la lune paraît, puis
             // son orbite s'enroule devant elle jusqu'à refermer le cercle.
-            let wanted = (parentSelected || moonSelected) ? 1.0 : 0.0
+            let wanted = (parentSelected || moonSelected || lunarFlight) ? 1.0 : 0.0
             // Le ralentissement lié au voyage de la caméra ne vaut qu'à l'aller :
             // au dézoom il ferait justement traîner l'anneau le plus longtemps.
             let rate = wanted > 0 ? revealRate : dt / Self.MOON_HIDE

@@ -48,3 +48,55 @@ let missionSpecs: [MissionSpec] = [
     MissionSpec(n: "Dawn", status: "historic", color: 0xf2c4a2, valid: "2007–2018",
         route: [[2007.74,1.00,0.1197,0],[2008.20,1.21,2.3536,0],[2008.67,1.37,3.9905,0],[2009.13,1.52,5.2876,0],[2009.93,1.85,6.0108,0],[2010.74,2.12,6.5342,0],[2011.54,2.36,6.9457,0],[2012.77,2.52,7.5594,0],[2013.99,2.65,8.1061,0],[2015.22,2.77,8.6037,0],[2016.22,2.77,9.3018,0],[2017.22,2.77,10.0000,0],[2018.22,2.77,10.6981,0]]),
 ].sorted { missionYears($0).start < missionYears($1).start } // du plus ancien départ au plus récent
+
+// Vols habités : ce sont des jours, pas des années. Chaque profil vient des
+// repères réels de la mission — injection translunaire, mise en orbite lunaire,
+// injection trans-Terre — d'où les durées de chaque temps du voyage.
+// `loops` est le nombre de tours *dessinés* : les trente orbites d'Apollo 11 se
+// réduiraient à un pâté sur trois pixels.
+
+let crewedSpecs: [MissionSpec] = [
+    MissionSpec(n: "Vostok 1", status: "historic", color: 0xff8f6b, valid: "12 avril 1961 · 108 min",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -14143.2451, days: 0.0750,
+            profile: .earthOrbit(altitude: 248, period: 89.34, inclination: 64.95),
+            crew: "Youri Gagarine")),
+    MissionSpec(n: "Apollo 8", status: "historic", color: 0xf2d9a6, valid: "21 – 27 décembre 1968",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -11332.9646, days: 6.1250,
+            profile: .lunar(outbound: 2.763, around: 0.841, inbound: 2.403, loops: 4, periluneKm: 110),
+            crew: "Borman · Lovell · Anders")),
+    MissionSpec(n: "Apollo 11", status: "historic", color: 0xfff4d8, valid: "16 – 24 juillet 1969",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -11125.9361, days: 8.1375,
+            profile: .lunar(outbound: 3.045, around: 2.482, inbound: 2.497, loops: 6, periluneKm: 110),
+            crew: "Armstrong · Aldrin · Collins")),
+    MissionSpec(n: "Apollo 13", status: "historic", color: 0xff9f8f, valid: "11 – 17 avril 1970",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -10856.6993, days: 5.9542,
+            // Retour libre : pas de mise en orbite, un demi-tour derrière la Lune
+            profile: .lunar(outbound: 3.002, around: 0.2, inbound: 2.640, loops: 0.5, periluneKm: 254),
+            crew: "Lovell · Swigert · Haise")),
+    MissionSpec(n: "Apollo 17", status: "historic", color: 0xd9b06e, valid: "7 – 19 décembre 1972",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -9886.2687, days: 12.5778,
+            profile: .lunar(outbound: 3.459, around: 6.158, inbound: 2.826, loops: 8, periluneKm: 110),
+            crew: "Cernan · Evans · Schmitt")),
+    MissionSpec(n: "Apollo-Soyouz", status: "historic", color: 0xa9c8f5, valid: "15 – 24 juillet 1975",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -8935.6736, days: 9.0611,
+            profile: .earthOrbit(altitude: 222, period: 88.9, inclination: 51.8),
+            crew: "Stafford · Brand · Slayton · Leonov · Koubassov")),
+    MissionSpec(n: "STS-1", status: "historic", color: 0xdfe4ee, valid: "12 – 14 avril 1981",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: -6838.0, days: 2.2646,
+            profile: .earthOrbit(altitude: 307, period: 89.4, inclination: 40.3),
+            crew: "Young · Crippen")),
+    MissionSpec(n: "Artemis II", status: "historic", color: 0x7fd8ff, valid: "1ᵉʳ – 10 avril 2026",
+        parent: "Terre",
+        crewed: CrewedSpec(launchDay: 9587.4410, days: 9.0639,
+            // Survol en retour libre, à 6 550 km de la surface
+            profile: .lunar(outbound: 4.15, around: 0.25, inbound: 4.55, loops: 0.5, periluneKm: 6550),
+            crew: "Wiseman · Glover · Koch · Hansen")),
+]
+

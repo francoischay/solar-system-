@@ -145,23 +145,52 @@ private struct ListNote: View {
 struct MissionList: View {
     @EnvironmentObject var engine: Engine
 
+    private var robotic: [Mission] { engine.missions.filter { $0.spec.crewed == nil } }
+    private var crewed: [Mission] { engine.missions.filter { $0.spec.crewed != nil } }
+
     var body: some View {
-        VStack(spacing: 7) {
-            ForEach(engine.missions, id: \.spec.n) { mission in
-                Button {
-                    withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
-                } label: {
-                    ExplorerRow(
-                        color: mission.spec.color,
-                        glyph: .symbol("paperplane.fill"),
-                        title: mission.spec.n,
-                        meta: mission.spec.valid,
-                        selected: engine.selected == .mission(mission)
-                    )
-                }
+        VStack(spacing: 12) {
+            VStack(spacing: 7) {
+                ForEach(robotic, id: \.spec.n) { row($0, glyph: "paperplane.fill") }
             }
+            // Les vols habités sont à part : ce ne sont pas des années de
+            // croisière mais quelques jours, et ils tiennent tous dans le
+            // voisinage de la Terre.
+            SectionLabel(text: "Vols habités")
+            VStack(spacing: 7) {
+                ForEach(crewed, id: \.spec.n) { row($0, glyph: "person.fill") }
+            }
+            ListNote(text: "Trajectoires reconstruites · distances comprimées")
         }
         .padding(.top, 4)
+    }
+
+    private func row(_ mission: Mission, glyph: String) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
+        } label: {
+            ExplorerRow(
+                color: mission.spec.color,
+                glyph: .symbol(glyph),
+                title: mission.spec.n,
+                meta: mission.spec.valid,
+                selected: engine.selected == .mission(mission)
+            )
+        }
+    }
+}
+
+/// Intertitre de liste : sépare deux familles sans ajouter un onglet de plus.
+private struct SectionLabel: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(TypeScale.meta)
+            .foregroundStyle(.white.opacity(0.45))
+            .textCase(.uppercase)
+            .kerning(0.6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 2)
     }
 }
 

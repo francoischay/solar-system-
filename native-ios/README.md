@@ -8,6 +8,7 @@ La scène 3D est rendue par SceneKit (Metal), l'interface par SwiftUI. iPhone et
 - Orbites képlériennes J2000 (éléments JPL, équation de Kepler résolue par Newton), ellipses inclinées, distances comprimées en log, direction exacte.
 - 8 planètes texturées (vraies cartes équirectangulaires téléchargées + textures procédurales CoreGraphics en repli hors ligne), anneaux de Saturne, 22 lunes avec leurs périodes réelles.
 - 26 sondes : trajectoires reconstruites (routes interpolées Catmull-Rom, latitude écliptique réelle — Ulysses sort du plan), orbites paramétriques, sondes en orbite planétaire ; traînée de la trajectoire parcourue et cadrage caméra automatique.
+- 8 vols habités, de Vostok 1 à Artemis II : trajectoire calculée au jour près dans le repère de la Terre — orbite de parking, injection translunaire, boucles autour de la Lune, retour — d'après les repères réels de chaque mission. Sélectionner un vol resserre la timeline sur ses dates et fait paraître la Lune ; les points du tracé sont répartis par phase, sinon l'orbite de parking (88 min) disparaîtrait dans un tracé de douze jours.
 - Satellites en propagation SGP4 (SatelliteKit) : TLE réels rafraîchis depuis Celestrak (cache disque 12 h, repli embarqué), altitude comprimée en log (surface < LEO < MEO < Lune), globe calé sur le temps sidéral (GMST) et incliné de 23,44°, fenêtre SGP4 de ±45 jours (au-delà : positions gelées au bord et maquettes estompées).
 - Constellations GPS et Starlink en nuage de points, avec année de lancement lue dans le TLE (un satellite n'apparaît jamais avant son lancement).
 - Prochains lancements réels (API Launch Library / thespacedevs, cache 1 h, repli embarqué) : vrais pas de tir posés à leur lat/lon, arc d'ascension animé (vertical puis basculement vers l'est), plongée caméra sur le site à la date du tir.
@@ -41,7 +42,7 @@ Ou ouvrir `SystemeSolaire.xcodeproj` dans Xcode (≥ 16) et lancer. Dépendance 
 SystemeSolaire/
 ├── App.swift              # point d'entrée SwiftUI
 ├── Orbital.swift          # Kepler, temps (J2000, GMST), compressions log, lunes
-├── MissionData.swift      # les 26 sondes (routes, orbites, paramètres locaux)
+├── MissionData.swift      # les 26 sondes et les 8 vols habités
 ├── SatelliteData.swift    # specs satellites + TLE de repli, lancements de repli
 ├── InfoTexts.swift        # textes du cartouche
 ├── SatelliteEngine.swift  # pont SGP4 (SatelliteKit), caches Celestrak & Launch Library

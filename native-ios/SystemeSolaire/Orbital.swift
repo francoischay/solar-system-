@@ -144,11 +144,219 @@ struct MissionSpec {
     var parent: String? = nil
     /// [rayon scène, fréquence (tours/jour), phase]
     var local: [Double]? = nil
+    /// Vol habité : trajectoire à l'échelle du jour, dans le voisinage terrestre
+    var crewed: CrewedSpec? = nil
+}
+
+// MARK: - Vols habités
+
+/// Les sondes se lisent à l'échelle de l'année ; un vol habité dure des jours,
+/// parfois une heure et demie. Sa trajectoire est donc calculée dans le repère
+/// de la Terre, au jour près, à partir du profil réel de la mission.
+struct CrewedSpec {
+    /// jour J2000 du décollage (UTC)
+    let launchDay: Double
+    /// durée de la mission, en jours
+    let days: Double
+    let profile: CrewedProfile
+    /// équipage affiché sous le nom
+    let crew: String
+}
+
+enum CrewedProfile {
+    /// Orbite terrestre : altitude (km), période (minutes), inclinaison (°).
+    /// La trace ne montre que la dernière révolution — les suivantes se
+    /// superposeraient exactement à celle-là.
+    case earthOrbit(altitude: Double, period: Double, inclination: Double)
+    /// Vol lunaire. `outbound` / `around` / `inbound` sont les durées réelles en
+    /// jours des trois temps du voyage ; `loops` le nombre de révolutions
+    /// *dessinées* autour de la Lune (0,5 pour un survol en retour libre) —
+    /// tracer les trente orbites d'Apollo 11 donnerait un gribouillis.
+    /// `periluneKm` fixe l'altitude du passage au plus près.
+    case lunar(outbound: Double, around: Double, inbound: Double, loops: Double, periluneKm: Double)
+}
+
+enum Crewed {
+    /// Orbite de parking avant l'injection translunaire (Apollo : 185 km, 32,5°)
+    static let PARKING_KM = 6371.0 + 185
+    static let PARKING_INCLINATION = 32.5 * Astro.DEG
+    static let PARKING_PERIOD = 88.2 / 1440       // jours
+    /// Interface de rentrée : 122 km d'altitude
+    static let ENTRY_KM = 6371.0 + 122
+    /// Rayon de la Lune telle que la scène la dessine
+    static var moonSize: Double { moonSpecs["Terre"]?.first?.size ?? 0.42 }
+}
+
+/// Point d'une orbite circulaire inclinée, dans le repère de son primaire.
+func inclinedCircle(radius: Double, angle: Double, inclination: Double, node: Double) -> SIMD3<Double> {
+    let x = cos(angle), z = sin(angle)
+    // basculement du plan orbital, puis rotation du nœud ascendant
+    let y2 = -z * sin(inclination), z2 = z * cos(inclination)
+    return SIMD3(
+        (x * cos(node) + z2 * sin(node)) * radius,
+        y2 * radius,
+        (-x * sin(node) + z2 * cos(node)) * radius
+    )
+}
+
+/// Position de la Lune dans le repère de la Terre, telle que la scène la place.
+/// Une trajectoire lunaire doit viser la Lune *de la scène*, pas l'éphéméride —
+/// sinon la capsule arrive là où il n'y a rien.
+func earthMoonLocalPosition(day d: Double) -> SIMD3<Double> {
+    guard let moon = moonSpecs["Terre"]?.first else { return SIMD3(Astro.MOON_SCENE_RADIUS, 0, 0) }
+    return moonLocalPosition(phase: 0, period: moon.period, radius: moon.radius, day: d)
+}
+
+/// Balayage angulaire d'une croisière translunaire : l'essentiel de l'angle est
+/// fait tôt, près du périgée, puis la capsule monte presque radialement. Une
+/// puissance fractionnaire donnerait la bonne allure mais une pente infinie au
+/// raccord — le tracé partirait d'un coup de fouet. Cette parabole est
+/// front-loaded et se raccorde proprement des deux côtés.
+private func coastSweep(_ u: Double) -> Double {
+    let t = max(0, min(1, u))
+    return t * (2 - t)
+}
+
+/// Interpolation sur la sphère : la direction tourne à vitesse constante.
+private func slerpDirection(_ a: SIMD3<Double>, _ b: SIMD3<Double>, _ t: Double) -> SIMD3<Double> {
+    let ua = simd_normalize(a), ub = simd_normalize(b)
+    let dot = max(-1, min(1, simd_dot(ua, ub)))
+    let omega = acos(dot)
+    if omega < 1e-4 { return simd_normalize(ua + (ub - ua) * t) }
+    let s = sin(omega)
+    return ua * (sin((1 - t) * omega) / s) + ub * (sin(t * omega) / s)
+}
+
+/// Rayon de scène pendant la croisière translunaire. Apollo 11 a franchi la
+/// moitié de la distance Terre-Lune vingt-quatre heures après l'injection, sur
+/// les soixante-treize du trajet : la capsule s'arrache, puis rampe. Sur l'axe
+/// comprimé de la scène, cela revient à avoir fait 89 % du chemin au tiers du
+/// temps — d'où l'exposant. Une loi en t^(2/3), plus juste en kilomètres, aurait
+/// une pente infinie au décollage et couperait le tracé net au raccord.
+private func coastRadius(_ u: Double, from rStart: Double, to rEnd: Double) -> Double {
+    let progress = 1 - pow(1 - max(0, min(1, u)), 5.4)
+    return rStart + (rEnd - rStart) * progress
+}
+
+/// Découpage du tracé d'un vol lunaire. Le temps ne se découpe pas en tranches
+/// égales : l'orbite de parking boucle en quatre-vingt-huit minutes et les
+/// boucles lunaires en deux heures, tandis que la croisière ne bouge presque
+/// plus pendant trois jours. À pas constant, le parking d'Apollo 17 n'attrape
+/// que trois points sur les sept cent vingt du tracé — un triangle collé à la
+/// Terre. Chaque phase reçoit donc son quota de points.
+private func crewedPhases(_ c: CrewedSpec) -> [(weight: Double, days: Double)] {
+    guard case .lunar(let outbound, let around, let inbound, let loops, _) = c.profile else {
+        return [(1, c.days)]
+    }
+    let park = max(0.02, c.days - (outbound + around + inbound))
+    return [(110, park), (190, outbound), (max(40, loops * 70), around), (190, inbound)]
+}
+
+/// Jour de la mission pour une fraction `k` du tracé (0 = décollage, 1 = fin).
+func crewedSampleDay(_ c: CrewedSpec, at k: Double) -> Double {
+    let phases = crewedPhases(c)
+    let total = phases.reduce(0) { $0 + $1.weight }
+    var remaining = max(0, min(1, k)) * total
+    var day = c.launchDay
+    for phase in phases {
+        if remaining <= phase.weight {
+            return day + phase.days * (remaining / phase.weight)
+        }
+        remaining -= phase.weight
+        day += phase.days
+    }
+    return c.launchDay + c.days
+}
+
+/// L'inverse : où en est le tracé à une date donnée. La mission n'est pas
+/// toujours finie quand on la regarde — le tracé s'arrête au jour courant.
+func crewedSampleProgress(_ c: CrewedSpec, day d: Double) -> Double {
+    let phases = crewedPhases(c)
+    let total = phases.reduce(0) { $0 + $1.weight }
+    var elapsed = max(0, min(c.days, d - c.launchDay))
+    var done = 0.0
+    for phase in phases {
+        if elapsed <= phase.days {
+            return (done + phase.weight * (elapsed / max(1e-9, phase.days))) / total
+        }
+        elapsed -= phase.days
+        done += phase.weight
+    }
+    return 1
+}
+
+/// Position d'un vaisseau habité, dans le repère de la Terre.
+func crewedLocalPosition(_ c: CrewedSpec, day d: Double) -> SIMD3<Double> {
+    let t = max(0, min(c.days, d - c.launchDay))
+    switch c.profile {
+    case .earthOrbit(let altitude, let period, let inclination):
+        let radius = Astro.orbitSceneRadius(km: 6371 + altitude)
+        let angle = t / (period / 1440) * Astro.TAU
+        return inclinedCircle(radius: radius, angle: angle,
+                              inclination: inclination * Astro.DEG, node: 0.9)
+
+    case .lunar(let outbound, let around, let inbound, let loops, let periluneKm):
+        let park = max(0.02, c.days - (outbound + around + inbound))
+        let rPark = Astro.orbitSceneRadius(km: Crewed.PARKING_KM)
+        let rEntry = Astro.orbitSceneRadius(km: Crewed.ENTRY_KM)
+        // Le plan de l'orbite lunaire est celui du plan de vol : incliné sur le
+        // plan Terre-Lune, ce qui fait passer la boucle derrière la Lune.
+        // La Lune de la scène est dessinée trente fois trop grosse : mettre la
+        // boucle à l'échelle réelle la ferait passer sous la surface. L'altitude
+        // est donc comprimée en log, comme partout ailleurs — Apollo rase la
+        // Lune, Artemis passe visiblement au large.
+        let lunarRadius = Crewed.moonSize + 0.13 * log1p(periluneKm / 500)
+        let entryAngle = 0.0, exitAngle = loops * Astro.TAU
+        let arrivalDay = c.launchDay + park + outbound
+        let departureDay = arrivalDay + around
+
+        func lunarOffset(_ angle: Double) -> SIMD3<Double> {
+            inclinedCircle(radius: lunarRadius, angle: angle, inclination: 1.05, node: 2.4)
+        }
+        // Injection translunaire : dernier point de l'orbite de parking
+        let tliAngle = park / Crewed.PARKING_PERIOD * Astro.TAU
+        let tli = inclinedCircle(radius: rPark, angle: tliAngle,
+                                 inclination: Crewed.PARKING_INCLINATION, node: 0.35)
+
+        if t < park {
+            let angle = t / Crewed.PARKING_PERIOD * Astro.TAU
+            return inclinedCircle(radius: rPark, angle: angle,
+                                  inclination: Crewed.PARKING_INCLINATION, node: 0.35)
+        }
+        if t < park + outbound {
+            let u = (t - park) / max(1e-6, outbound)
+            let target = earthMoonLocalPosition(day: arrivalDay) + lunarOffset(entryAngle)
+            // La direction balaie vite (l'essentiel de l'angle est fait près du
+            // périgée), le rayon suit la loi de chute : d'abord un coup de reins,
+            // puis une longue montée presque radiale.
+            let dir = slerpDirection(tli, target, coastSweep(u))
+            return dir * coastRadius(u, from: rPark, to: simd_length(target))
+        }
+        if t < park + outbound + around {
+            let v = (t - park - outbound) / max(1e-6, around)
+            return earthMoonLocalPosition(day: c.launchDay + t)
+                + lunarOffset(entryAngle + (exitAngle - entryAngle) * v)
+        }
+        let u = (t - park - outbound - around) / max(1e-6, inbound)
+        let start = earthMoonLocalPosition(day: departureDay) + lunarOffset(exitAngle)
+        // Retour : la Terre a tourné, le point de rentrée n'est pas celui du départ
+        let splash = inclinedCircle(radius: rEntry, angle: tliAngle - 0.55,
+                                    inclination: Crewed.PARKING_INCLINATION, node: 0.35)
+        // Retour : le miroir de l'aller — l'angle s'accélère en tombant vers la Terre
+        let dir = slerpDirection(start, splash, 1 - coastSweep(1 - u))
+        return dir * coastRadius(1 - u, from: rEntry, to: simd_length(start))
+    }
 }
 
 struct MissionYears { let start: Double; let end: Double }
 
 func missionYears(_ m: MissionSpec) -> MissionYears {
+    // Un vol habité porte ses dates réelles dans `valid` : les chiffres du jour
+    // et du mois y traîneraient dans le même panier que l'année.
+    if let c = m.crewed {
+        return MissionYears(start: Astro.decimalYear(c.launchDay),
+                            end: Astro.decimalYear(c.launchDay + c.days))
+    }
     let years = m.valid.split(whereSeparator: { !$0.isNumber }).compactMap { Double($0) }
     let start = m.launch ?? m.route?.first?[0] ?? years.first ?? 2000
     let end = years.count > 1 ? years[1] : (years.first ?? 2000)
@@ -156,12 +364,26 @@ func missionYears(_ m: MissionSpec) -> MissionYears {
 }
 
 func missionIsValid(_ m: MissionSpec, day d: Double) -> Bool {
+    // Un vol habité se joue au jour près : lui accorder l'année entière comme
+    // aux sondes le laisserait planté dans le ciel six mois après l'amerrissage.
+    if let c = m.crewed { return d >= c.launchDay && d <= c.launchDay + c.days }
     let y = Astro.decimalYear(d), limits = missionYears(m)
     return y >= limits.start && y <= limits.end + 1
 }
 
+/// Bornes d'une mission en jours J2000. Les sondes se calent sur l'année, les
+/// vols habités sur leurs dates réelles.
+func missionDayRange(_ m: MissionSpec) -> (first: Double, last: Double) {
+    if let c = m.crewed { return (c.launchDay, c.launchDay + c.days) }
+    let years = missionYears(m)
+    return (Astro.dayForYear(years.start), Astro.dayForYear(years.end + 1) - 1)
+}
+
 /// Position d'une sonde. `parentPosition` : position de la planète parente si m.parent est défini.
 func missionPosition(_ m: MissionSpec, day d: Double, parentPosition: SIMD3<Double>?) -> SIMD3<Double> {
+    if let c = m.crewed {
+        return (parentPosition ?? SIMD3()) + crewedLocalPosition(c, day: d)
+    }
     let limits = missionYears(m)
     let y = max(limits.start, min(limits.end, Astro.decimalYear(d)))
     if let local = m.local, let p = parentPosition {
