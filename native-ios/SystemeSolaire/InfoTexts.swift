@@ -1,6 +1,23 @@
 import Foundation
 
 // Textes du cartouche dépliable
+/// Les satellites ont leur propre table : leurs noms entrent en collision avec
+/// ceux des sondes. « Galileo » désigne à la fois la constellation européenne et
+/// la sonde qui a plongé dans Jupiter — et c'est le texte de la sonde qui
+/// s'affichait sous la constellation.
+let satelliteInfo: [String: String] = [
+    "ISS": "400 tonnes assemblées en orbite depuis 1998, habitées sans interruption depuis novembre 2000. Un tour de Terre en 92 minutes, soit seize levers de soleil par jour.",
+    "Hubble": "En orbite depuis 1990, réparé cinq fois par des équipages de navette. Il observe de l’ultraviolet à l’infrarouge proche, au-dessus de l’atmosphère qui brouille tout.",
+    "Tiangong": "La station chinoise, achevée en 2022 : trois modules et trois taïkonautes en permanence.",
+    "GPS": "Une trentaine de satellites à 20 200 km répartis sur six plans : où que vous soyez, au moins quatre sont visibles à la fois, ce qui suffit à calculer une position et l’heure.",
+    "Starlink": "Plusieurs milliers de satellites autour de 550 km d’altitude, la plus grande constellation jamais déployée. Quelques centaines seulement sont affichés ici.",
+    "Galileo": "Le système européen, opérationnel depuis 2016 : une trentaine de satellites à 23 200 km sur trois plans inclinés à 56°. Ses horloges atomiques au maser à hydrogène en font le plus précis des systèmes civils.",
+    "GLONASS": "Le système russe, hérité de l'Union soviétique et rétabli dans les années 2000. Ses vingt-quatre satellites sont inclinés à 64,8°, plus que tout autre constellation de navigation : c'est ce qui lui donne sa couverture des hautes latitudes.",
+    "Beidou": "Le système chinois, achevé en 2020. Seul des quatre à mêler trois types d'orbites — moyenne, géostationnaire et géosynchrone inclinée — ce qui densifie sa couverture au-dessus de l'Asie.",
+    "OneWeb": "Une constellation de communication à 1 200 km, sur des orbites quasi polaires inclinées à 87,9°. Bien plus haute que Starlink, elle couvre la même surface avec dix fois moins de satellites, au prix d'une latence supérieure.",
+    "Iridium NEXT": "Soixante-six satellites actifs à 780 km, plus des réserves en orbite. Ils communiquent entre eux par liaisons laser, ce qui permet de joindre n'importe quel point du globe sans passer par une station au sol.",
+]
+
 let infoText: [String: String] = [
     "Mercure": "La plus petite planète et la plus rapide : 88 jours pour boucler son orbite. Sans atmosphère pour amortir quoi que ce soit, sa surface passe de −170 °C la nuit à 430 °C au soleil. BepiColombo doit s’y mettre en orbite fin 2026.",
     "Vénus": "Presque la jumelle de la Terre par la taille, l’enfer en plus : 92 bars de gaz carbonique et 465 °C au sol, de quoi fondre le plomb. Elle tourne à l’envers, et si lentement qu’un jour vénusien dure plus longtemps que son année.",
@@ -58,11 +75,6 @@ let infoText: [String: String] = [
     "Mars Express": "En orbite depuis 2003, c'est la plus ancienne sonde encore active autour de Mars. Son radar a détecté ce qui pourrait être de l'eau liquide sous la calotte sud.",
     "Akatsuki": "Ratée en 2010, sa mise en orbite autour de Vénus a été retentée cinq ans plus tard avec les petits propulseurs d'attitude — et a réussi. Elle a cartographié les vents de la super-rotation atmosphérique jusqu'en 2024.",
     "JWST": "Au point de Lagrange L2, à 1,5 million de kilomètres de la Terre, protégé du Soleil par un pare-soleil de la taille d'un court de tennis. Il observe dans l'infrarouge les premières galaxies formées après le Big Bang.",
-    "ISS": "400 tonnes assemblées en orbite depuis 1998, habitées sans interruption depuis novembre 2000. Un tour de Terre en 92 minutes, soit seize levers de soleil par jour.",
-    "Hubble": "En orbite depuis 1990, réparé cinq fois par des équipages de navette. Il observe de l’ultraviolet à l’infrarouge proche, au-dessus de l’atmosphère qui brouille tout.",
-    "Tiangong": "La station chinoise, achevée en 2022 : trois modules et trois taïkonautes en permanence.",
-    "GPS": "Une trentaine de satellites à 20 200 km répartis sur six plans : où que vous soyez, au moins quatre sont visibles à la fois, ce qui suffit à calculer une position et l’heure.",
-    "Starlink": "Plusieurs milliers de satellites autour de 550 km d’altitude, la plus grande constellation jamais déployée. Quelques centaines seulement sont affichés ici.",
     "Prochaine mission orbitale": "Cap Canaveral tire vers l’est au-dessus de l’Atlantique pour profiter de la rotation terrestre, qui offre environ 400 m/s. La fenêtre affichée est illustrative : elle ne vient pas d’un manifeste de lancement réel.",
     "Mission d’observation": "Kourou se trouve à 5° de l’équateur, le site occidental le mieux placé pour les orbites géostationnaires. La fenêtre affichée est illustrative.",
     "Mission lunaire": "Tanegashima tire au-dessus du Pacifique depuis une île du sud du Japon. La fenêtre affichée est illustrative.",

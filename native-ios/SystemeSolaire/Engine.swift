@@ -68,7 +68,11 @@ final class SatModel {
     var altitudeKm: Double?
     var aliveCount = 0
     var inclinationDeg: Double = 0
+    /// Recul nécessaire pour tenir toute la constellation dans le cadre. Il n'est
+    /// connu qu'une fois les membres propagés — d'où `frameApplied`, qui laisse le
+    /// cadrage se corriger à la première mesure.
     var frameDist = 12.0
+    var frameApplied = false
     var launchYear: Int?
     var dimmed = false
     var dimmableMaterials: [SCNMaterial] = []
@@ -703,7 +707,12 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         case nil:
             selectionSub = "Explorer les orbites"
         }
-        selectionDetail = selection.flatMap { infoText[$0.name] }
+        // Un satellite est cherché dans sa propre table d'abord : « Galileo »
+        // nomme aussi bien la constellation que la sonde partie vers Jupiter.
+        selectionDetail = selection.flatMap { sel in
+            if case .satellite = sel { return satelliteInfo[sel.name] ?? infoText[sel.name] }
+            return infoText[sel.name]
+        }
         selectionIsSpacecraft = { if case .mission = selection { return true }; return false }()
         switch selection {
         case .mission: lastExploreSection = .missions
@@ -732,6 +741,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         case .satellite(let s):
             if s.isConstellation, s.frameDist > 0 {
                 goalDist = s.frameDist
+                // À la première sélection, `frameDist` vaut encore sa valeur par
+                // défaut : la constellation n'a jamais été propagée. La boucle de
+                // rendu corrigera dès qu'elle l'aura mesurée.
+                s.frameApplied = false
             } else {
                 // Rayon de l'orbite dans la scène, borné au voisinage terrestre :
                 // le nœud du satellite peut encore être à sa position de la veille.
@@ -1867,7 +1880,15 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         model.aliveCount = alive
         if alive > 0 {
             model.altitudeKm = altitudeSum / Double(alive)
-            model.frameDist = max(5, radiusSum / Double(alive) * 2.8)
+            // `frameDistance` tient compte du format : en portrait c'est la
+            // largeur qui contraint (±11° contre ±23°). Le facteur 2,8 utilisé
+            // avant ne cadrait qu'à la verticale — invisible tant que GPS n'avait
+            // qu'un seul satellite embarqué, criant avec une vraie constellation.
+            model.frameDist = max(5, frameDistance(radius: radiusSum / Double(alive), margin: 1.15))
+            if !model.frameApplied, selected == .satellite(model) {
+                model.frameApplied = true
+                goalDist = model.frameDist
+            }
         }
         model.constellationDay = sceneDay
         let pointSize = max(0.02, min(0.35, dist * 0.014))
