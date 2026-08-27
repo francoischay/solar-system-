@@ -202,6 +202,13 @@ enum Crewed {
     /// le déroulé de la mission reprend : l'ascension et l'orbite doivent se
     /// raccorder sur le même point, sinon la capsule saute au passage de relais.
     static let ASCENT_DOWNRANGE = 0.42
+    /// Révolutions terrestres *dessinées* au plus, quelle que soit la durée du
+    /// vol. Essayé sans : Apollo-Soyouz en boucle cent quarante-sept, soit quatre
+    /// tours et demi par seconde — un stroboscope, pas un vol. Et elles repassent
+    /// exactement par le même cercle, donc on ne perd rien à les plafonner. Même
+    /// principe que les boucles lunaires : le tracé est un dessin, la durée réelle
+    /// est portée par la date.
+    static let MAX_ORBIT_LOOPS = 6.0
     /// Rayon de la Lune telle que la scène la dessine
     static var moonSize: Double { moonSpecs["Terre"]?.first?.size ?? 0.42 }
 }
@@ -302,15 +309,17 @@ private func coastRadius(_ u: Double, from rStart: Double, to rEnd: Double) -> D
 /// que trois points sur les sept cent vingt du tracé — un triangle collé à la
 /// Terre. Chaque phase reçoit donc son quota de points.
 private func crewedPhases(_ c: CrewedSpec) -> [(weight: Double, days: Double)] {
+    let ascentDays = crewedAscentDays(c)
     guard case .lunar(let outbound, let around, let inbound, let loops, _) = c.profile else {
-        return [(1, c.days)]
+        // L'ascension a son propre quota : partagée au prorata de sa durée, une
+        // montée de six minutes n'attraperait qu'un point sur un vol de neuf jours.
+        return [(70, ascentDays), (400, max(0, c.days - ascentDays))]
     }
     let park = max(0.02, c.days - (outbound + around + inbound))
     // L'orbite de parking pèse plus lourd que sa durée : une révolution et demie
     // en quatre secondes se lisait comme une accélération brutale juste après
     // l'ascension. Elle a maintenant le temps de se voir.
-    let ascent = crewedAscentDays(c)
-    return [(70, ascent), (165, max(0, park - ascent)), (190, outbound),
+    return [(70, ascentDays), (165, max(0, park - ascentDays)), (190, outbound),
             (max(40, loops * 70), around), (190, inbound)]
 }
 
@@ -419,7 +428,14 @@ func crewedLocalPosition(_ c: CrewedSpec, day d: Double) -> SIMD3<Double> {
     }
     switch c.profile {
     case .earthOrbit(_, let period):
-        return crewedOrbitPoint(c, radius: orbitRadius, angle: t / (period / 1440) * Astro.TAU)
+        // Sous le plafond — Vostok 1 et son unique tour, Friendship 7 et ses
+        // trois — la cadence reste exacte. Au-dessus, elle est étalée.
+        let span = max(1e-9, c.days - ascent)
+        let loops = min(span / (period / 1440), Crewed.MAX_ORBIT_LOOPS)
+        return crewedOrbitPoint(
+            c, radius: orbitRadius,
+            angle: Crewed.ASCENT_DOWNRANGE + (t - ascent) / span * loops * Astro.TAU
+        )
 
     case .lunar(let outbound, let around, let inbound, let loops, let periluneKm):
         let park = max(0.02, c.days - (outbound + around + inbound))

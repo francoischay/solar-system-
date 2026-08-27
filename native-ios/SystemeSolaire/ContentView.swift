@@ -125,6 +125,7 @@ struct ContentView: View {
         switch engine.exploreView {
         case .none: return "◎"
         case .missions: return "✦"
+        case .crewed: return "☾"
         case .satellites: return "▣"
         case .launches: return "↑"
         }
@@ -403,6 +404,7 @@ struct InfoCard: View {
         switch engine.exploreView {
         case .none: return engine.selectionSub
         case .missions: return "Choisir une sonde"
+        case .crewed: return "Choisir un vol habité"
         case .satellites: return "Choisir un satellite"
         case .launches: return "Choisir un lancement"
         }
@@ -599,7 +601,8 @@ struct PlaybackBar: View {
     private var speedLabel: String {
         "×" + (engine.playbackSpeed == rint(engine.playbackSpeed)
                ? String(Int(engine.playbackSpeed))
-               : String(format: "%.1f", engine.playbackSpeed))
+               : String(format: "%.1f", engine.playbackSpeed)
+                   .replacingOccurrences(of: ".", with: ","))
     }
 
     private func button(_ symbol: String, label: String, prominent: Bool = false,

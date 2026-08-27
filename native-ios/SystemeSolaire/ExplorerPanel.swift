@@ -7,15 +7,23 @@ struct ExplorerPanel: View {
     var body: some View {
         VStack(spacing: 7) {
             header
-            ScrollView {
-                switch engine.exploreView {
-                case .missions: MissionList()
-                case .satellites: SatelliteList()
-                case .launches: LaunchList()
-                case .none: EmptyView()
+            // La liste rouvre là où on l'avait laissée : sur la ligne choisie,
+            // pas en haut. Sans ça, revenir au panneau après avoir suivi une sonde
+            // oblige à la retrouver à chaque fois.
+            ScrollViewReader { scroll in
+                ScrollView {
+                    switch engine.exploreView {
+                    case .missions: MissionList()
+                    case .crewed: CrewedList()
+                    case .satellites: SatelliteList()
+                    case .launches: LaunchList()
+                    case .none: EmptyView()
+                    }
                 }
+                .frame(maxHeight: 360)
+                .onAppear { reveal(with: scroll, animated: false) }
+                .onChange(of: engine.exploreView) { reveal(with: scroll, animated: false) }
             }
-            .frame(maxHeight: 360)
             .padding(.horizontal, 9)
             .padding(.bottom, 10)
         }
@@ -25,10 +33,24 @@ struct ExplorerPanel: View {
         .transition(.scale(scale: 0.94, anchor: .bottomLeading).combined(with: .opacity))
     }
 
+    /// Amener la ligne sélectionnée au centre de la liste.
+    private func reveal(with scroll: ScrollViewProxy, animated: Bool) {
+        guard let anchor = engine.exploreAnchor else { return }
+        // Un tour de boucle d'attente : la liste vient d'être construite, ses
+        // ancres n'existent pas encore au moment où `onAppear` se déclenche.
+        DispatchQueue.main.async {
+            if animated { withAnimation(.easeOut(duration: 0.2)) { scroll.scrollTo(anchor, anchor: .center) } }
+            else { scroll.scrollTo(anchor, anchor: .center) }
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 6) {
-            HStack(spacing: 3) {
+            // Quatre onglets, donc plus de place perdue : l'espacement tombe à
+            // rien et les titres se resserrent plutôt que de se tronquer.
+            HStack(spacing: 2) {
                 tab("Sondes", .missions)
+                tab("Habités", .crewed)
                 tab("Satellites", .satellites)
                 tab("Lancements", .launches)
             }
@@ -56,8 +78,11 @@ struct ExplorerPanel: View {
         } label: {
             Text(title)
                 .font(TypeScale.label)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
                 .foregroundStyle(active ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.62))
                 .frame(maxWidth: .infinity)
+                .padding(.horizontal, 2)
                 .padding(.vertical, 8)
                 .background(active ? Color(red: 0.96, green: 0.95, blue: 1) : .clear, in: RoundedRectangle(cornerRadius: 13))
         }
@@ -145,57 +170,58 @@ private struct ListNote: View {
 struct MissionList: View {
     @EnvironmentObject var engine: Engine
 
-    private var robotic: [Mission] { engine.missions.filter { $0.spec.crewed == nil } }
-    private var crewed: [Mission] { engine.missions.filter { $0.spec.crewed != nil } }
+    var body: some View {
+        VStack(spacing: 7) {
+            ForEach(engine.missions.filter { $0.spec.crewed == nil }, id: \.spec.n) { mission in
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
+                } label: {
+                    ExplorerRow(
+                        color: mission.spec.color,
+                        glyph: .symbol("paperplane.fill"),
+                        title: mission.spec.n,
+                        meta: mission.spec.valid,
+                        selected: engine.selected == .mission(mission)
+                    )
+                }
+                .id(mission.spec.n)
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+// MARK: - Vols habités
+
+/// Ils ont leur propre onglet : ce ne sont pas des années de croisière mais
+/// quelques jours, ils tiennent tous dans le voisinage de la Terre, et ils se
+/// jouent au lieu de se consulter.
+struct CrewedList: View {
+    @EnvironmentObject var engine: Engine
 
     var body: some View {
         VStack(spacing: 12) {
             VStack(spacing: 7) {
-                ForEach(robotic, id: \.spec.n) { row($0, glyph: "paperplane.fill") }
-            }
-            // Les vols habités sont à part : ce ne sont pas des années de
-            // croisière mais quelques jours, et ils tiennent tous dans le
-            // voisinage de la Terre.
-            SectionLabel(text: "Vols habités")
-            VStack(spacing: 7) {
-                ForEach(crewed, id: \.spec.n) { row($0, glyph: "person.fill") }
+                ForEach(engine.missions.filter { $0.spec.crewed != nil }, id: \.spec.n) { mission in
+                    Button {
+                        // Choisir un vol, c'est le rejouer : même idiome qu'un
+                        // lancement, où la sélection déclenche la séquence.
+                        withAnimation(.easeOut(duration: 0.18)) { engine.playMission(mission) }
+                    } label: {
+                        ExplorerRow(
+                            color: mission.spec.color,
+                            glyph: .symbol("person.fill"),
+                            title: mission.spec.n,
+                            meta: mission.spec.valid,
+                            selected: engine.selected == .mission(mission)
+                        )
+                    }
+                    .id(mission.spec.n)
+                }
             }
             ListNote(text: "Choisir un vol le rejoue, du décollage au retour")
         }
         .padding(.top, 4)
-    }
-
-    private func row(_ mission: Mission, glyph: String) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.18)) {
-                // Choisir un vol habité, c'est le rejouer : même idiome qu'un
-                // lancement, où la sélection déclenche la séquence.
-                if mission.spec.crewed != nil { engine.playMission(mission) }
-                else { engine.selectMission(mission) }
-            }
-        } label: {
-            ExplorerRow(
-                color: mission.spec.color,
-                glyph: .symbol(glyph),
-                title: mission.spec.n,
-                meta: mission.spec.valid,
-                selected: engine.selected == .mission(mission)
-            )
-        }
-    }
-}
-
-/// Intertitre de liste : sépare deux familles sans ajouter un onglet de plus.
-private struct SectionLabel: View {
-    let text: String
-    var body: some View {
-        Text(text)
-            .font(TypeScale.meta)
-            .foregroundStyle(.white.opacity(0.45))
-            .textCase(.uppercase)
-            .kerning(0.6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 2)
     }
 }
 
@@ -219,6 +245,7 @@ struct SatelliteList: View {
                             selected: engine.selected == .satellite(model)
                         )
                     }
+                    .id(model.spec.n)
                 }
             }
             Toggle(isOn: $engine.showAllSatellites) {
@@ -265,6 +292,7 @@ struct LaunchList: View {
                             }
                         }
                     }
+                    .id(launch.id)
                 }
             }
             ListNote(text: "Fenêtres indicatives · trajectoire non télémétrique")

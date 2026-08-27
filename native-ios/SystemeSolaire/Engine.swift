@@ -105,7 +105,7 @@ enum Selection: Equatable {
     }
 }
 
-enum ExploreView: String { case none, missions, satellites, launches }
+enum ExploreView: String { case none, missions, crewed, satellites, launches }
 
 struct LabelInfo: Identifiable, Equatable {
     let id: String
@@ -297,7 +297,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     /// Vitesse du rejeu. Elle porte aussi les haptiques : à ×4, le grondement du
     /// décollage dure le quart du temps, sinon il déborderait sur la croisière.
     @Published var playbackSpeed = 1.0
-    static let PLAYBACK_SPEEDS = [1.0, 2.0, 4.0]
+    /// ×0,5 existe pour les vols en orbite basse : Apollo-Soyouz boucle cent
+    /// quarante-sept révolutions, et à vitesse nominale elles défilent trop vite
+    /// pour qu'on en suive une.
+    static let PLAYBACK_SPEEDS = [1.0, 2.0, 4.0, 0.5]
 
     /// La mission habitée en cours de sélection — c'est elle que pilote le
     /// contrôleur, qu'elle soit en train de se jouer ou à l'arrêt.
@@ -771,6 +774,22 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         return "\(s.aliveCount) satellite\(s.aliveCount > 1 ? "s" : "") · " + orbit
     }
 
+    /// Ligne à ramener sous les yeux quand on rouvre le panneau. Rouvrir la liste
+    /// tout en haut alors qu'on suit Cassini oblige à re-parcourir vingt-six
+    /// sondes à chaque aller-retour.
+    var exploreAnchor: String? {
+        switch exploreView {
+        case .missions, .crewed:
+            if case .mission(let m) = selected { return m.spec.n }
+            return nil
+        case .satellites:
+            if case .satellite(let s) = selected { return s.spec.n }
+            return nil
+        case .launches: return selectedLaunch?.id
+        case .none: return nil
+        }
+    }
+
     func setSelected(_ selection: Selection?) {
         let changed = selected != selection
         selected = selection
@@ -803,7 +822,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             return false
         }()
         switch selection {
-        case .mission: lastExploreSection = .missions
+        case .mission(let m): lastExploreSection = m.spec.crewed == nil ? .missions : .crewed
         case .satellite: lastExploreSection = .satellites
         default: break
         }
@@ -893,7 +912,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         selectedLaunch = nil
         setSelected(.mission(mission))
         exploreView = .none
-        lastExploreSection = .missions
+        lastExploreSection = .crewed
         playedBeats = 0
         missionCoastClock = 0
         missionCoastEase = 0
@@ -1727,7 +1746,14 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 // un vol en orbite basse aussi : les cent quarante-huit tours
                 // d'Apollo-Soyouz repassent tous par le même cercle.
                 var cycle = mission.spec.orbit.map { $0[3] * 365.25 } ?? mission.spec.local.map { 1 / $0[1] } ?? 0
-                if case .earthOrbit(_, let period)? = mission.spec.crewed?.profile { cycle = period / 1440 }
+                // Un vol en orbite basse ne montre que sa dernière révolution : les
+                // suivantes repassent exactement par le même cercle. La période
+                // prise ici est celle *dessinée*, plafonnée, pas la vraie.
+                if case .earthOrbit(_, let period)? = mission.spec.crewed?.profile,
+                   let c = mission.spec.crewed {
+                    let span = max(1e-9, c.days - crewedAscentDays(c))
+                    cycle = span / min(span / (period / 1440), Crewed.MAX_ORBIT_LOOPS)
+                }
                 let startDay = max(originDay, cycle > 0 ? endDay - cycle * 1.15 : -1e9)
                 if endDay >= startDay {
                     // Une boucle lunaire enroulée huit fois demande plus de points
