@@ -8,6 +8,11 @@ import UIKit
 final class Planet {
     let spec: PlanetSpec
     let node = SCNNode()
+    /// L'anneau d'orbite appartient à la planète : son opacité dépend de ce qui
+    /// est sélectionné dans la scène, il faut donc pouvoir le retrouver.
+    let orbitNode = SCNNode()
+    var orbitOpacity = 0.0
+    var orbitOpacityVelocity = 0.0
     let trail: TrailLine
     var moonSystem: MoonSystem?
     init(spec: PlanetSpec) {
@@ -169,6 +174,27 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     /// autrefois : c'était toujours la moitié. Depuis que le cartouche épouse son
     /// texte, la zone libre change avec lui et la scène doit se recentrer dedans.
     private var detailCoverage = 0.5
+
+    /// Opacité d'un anneau d'orbite au repos, et quand la scène regarde ailleurs.
+    /// Elles ne s'éteignent pas : le système doit rester lisible en fond, sinon
+    /// l'objet suivi flotte sans échelle autour de lui.
+    static let ORBIT_IDLE = 0.12
+    static let ORBIT_ASIDE = 0.035
+
+    /// La planète que la sélection courante concerne, s'il y en a une : celle
+    /// qu'on a choisie, celle dont on suit une lune, ou la Terre dès qu'il s'agit
+    /// d'un satellite, d'un lancement ou d'un vol habité. Son anneau reste allumé,
+    /// les autres s'effacent.
+    private var focusedOrbitPlanet: String? {
+        if selectedLaunch != nil { return "Terre" }
+        switch selected {
+        case .planet(let p): return p.spec.name
+        case .moon(let m): return m.planet.spec.name
+        case .mission(let m): return m.spec.crewed != nil ? "Terre" : m.spec.parent
+        case .satellite: return "Terre"
+        case nil: return nil
+        }
+    }
 
     var selected: Selection? {
         didSet {
@@ -468,10 +494,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             for k in 0...192 {
                 orbitPoints.append(planetPosition(spec, day: Double(k) / 192 * spec.p * 365.25))
             }
-            if let g = Geo.lineGeometry(points: orbitPoints, color: uiColor(0xc7ccff)) {
-                let orbitNode = SCNNode(geometry: g)
-                orbitNode.opacity = 0.065
-                scene.rootNode.addChildNode(orbitNode)
+            // Additif : sur un champ presque noir, une ligne en alpha pose un voile
+            // gris, tandis qu'une ligne additive n'ajoute que de la lumière — et les
+            // croisements s'additionnent, donc le cœur du système s'éclaircit tout
+            // seul là où les orbites se serrent. L'opacité monte d'un cran pour
+            // compenser : l'additif ne recouvre plus le fond, il s'y ajoute.
+            if let g = Geo.lineGeometry(points: orbitPoints, color: uiColor(0xe0d6ff), additive: true) {
+                planet.orbitNode.geometry = g
+                planet.orbitOpacity = Self.ORBIT_IDLE
+                planet.orbitNode.opacity = CGFloat(Self.ORBIT_IDLE)
+                scene.rootNode.addChildNode(planet.orbitNode)
             }
             let sphere = Geo.sphereGeometry(radius: spec.size)
             let material = SCNMaterial()
@@ -517,7 +549,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             scene.rootNode.addChildNode(system.group)
             for (index, spec) in specs.enumerated() {
                 let moon = MoonBody(spec: spec, phase: Double(index) * 1.7, planet: planet)
-                moon.orbitNode.opacity = 0.08
+                moon.orbitNode.opacity = 0.14
                 system.group.addChildNode(moon.orbitNode)
                 let sphere = Geo.sphereGeometry(radius: spec.size, widthSegments: 20, heightSegments: 14)
                 let material = SCNMaterial()
@@ -1181,7 +1213,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             let a = head - Astro.TAU * sweep * (1 - Double(k) / Double(steps))
             return SIMD3(cos(a) * radius, lift * cos(a - head), sin(a) * radius)
         }
-        return Geo.lineGeometry(points: points, color: uiColor(0xdce0ff))
+        return Geo.lineGeometry(points: points, color: uiColor(0xece2ff), additive: true)
     }
 
     private func buildLaunchArc(points: [SIMD3<Double>], color: UIColor) {
@@ -1734,8 +1766,19 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         let trailStrength = min(1, trailEnergy / 180)
 
         // Planètes
+        let orbitFocus = focusedOrbitPlanet
         for planet in planets {
             planet.node.position = SCNVector3(planetPosition(planet.spec, day: day))
+            // Quand la scène suit quelque chose, les orbites qui n'y sont pour
+            // rien s'effacent. En glissant : une coupure sèche à la sélection se
+            // lirait comme un clignotement au bord du champ.
+            let orbitTarget = orbitFocus == nil || orbitFocus == planet.spec.name
+                ? Self.ORBIT_IDLE : Self.ORBIT_ASIDE
+            planet.orbitOpacity = smoothDamp(
+                planet.orbitOpacity, toward: orbitTarget,
+                velocity: &planet.orbitOpacityVelocity, smoothTime: 0.4, deltaTime: dt
+            )
+            planet.orbitNode.opacity = CGFloat(planet.orbitOpacity)
             if planet.spec.name != "Terre" {
                 planet.node.eulerAngles.y = Float(day * 0.015 / (1 + Double(planet.spec.index) * 0.15))
             }
@@ -2436,7 +2479,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             }
         }
         guard points.count >= 8 else { return }
-        orbitNode.geometry = Geo.lineGeometry(points: points, color: model.rampColor)
+        orbitNode.geometry = Geo.lineGeometry(points: points, color: model.rampColor, additive: true)
     }
 
     // Étiquette de l'objet suivi (sonde ou satellite sélectionné)
