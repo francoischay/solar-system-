@@ -268,7 +268,7 @@ func inclinedCircle(radius: Double, angle: Double, inclination: Double, node: Do
 /// sinon la capsule arrive là où il n'y a rien.
 func earthMoonLocalPosition(day d: Double) -> SIMD3<Double> {
     guard let moon = moonSpecs["Terre"]?.first else { return SIMD3(Astro.MOON_SCENE_RADIUS, 0, 0) }
-    return moonLocalPosition(phase: 0, period: moon.period, radius: moon.radius, day: d)
+    return moonLocalPosition(moon, phase: 0, radius: moon.radius, day: d)
 }
 
 /// Balayage angulaire d'une croisière translunaire : l'essentiel de l'angle est
@@ -571,6 +571,9 @@ struct MoonSpec {
     let size: Double
     let color: UInt32
     let period: Double  // période réelle en jours (négative = rétrograde)
+    /// Seule la Lune a une éphéméride : c'est la seule dont on puisse vérifier
+    /// la position à l'œil nu, un soir, depuis un jardin.
+    var hasEphemeris: Bool { name == "Lune" }
 }
 
 let moonSpecs: [String: [MoonSpec]] = [
@@ -612,7 +615,74 @@ func moonAngle(phase: Double, period: Double, day d: Double) -> Double {
     phase + (d / period) * Astro.TAU
 }
 
-func moonLocalPosition(phase: Double, period: Double, radius: Double, day d: Double) -> SIMD3<Double> {
-    let a = moonAngle(phase: phase, period: period, day: d)
-    return SIMD3(cos(a) * radius, sin(a * 0.7) * 0.18, sin(a) * radius)
+/// Longitude et latitude écliptiques géocentriques de la Lune, en degrés.
+/// Série tronquée de Meeus (*Astronomical Algorithms*, ch. 47) : les dix-huit
+/// plus gros termes en longitude, les dix plus gros en latitude, soit environ
+/// 0,3° — de quoi faire tomber les nouvelles lunes au bon jour et aligner les
+/// éclipses, ce qu'un angle uniforme ne peut pas faire.
+///
+/// La latitude compte autant que la longitude : l'orbite est inclinée de 5,14°,
+/// et c'est le passage de la Lune par un nœud qui décide s'il y a éclipse ou
+/// simple nouvelle lune. Sans elle, la Lune couperait le plan à chaque tour.
+func moonEcliptic(day d: Double) -> (lon: Double, lat: Double) {
+    let t = d / 36525
+    let t2 = t * t
+    let lp = 218.3164477 + 481267.88123421 * t - 0.0015786 * t2  // longitude moyenne
+    let dd = 297.8501921 + 445267.1114034 * t - 0.0018819 * t2   // élongation moyenne
+    let m  = 357.5291092 + 35999.0502909 * t - 0.0001536 * t2    // anomalie du Soleil
+    let mp = 134.9633964 + 477198.8675055 * t + 0.0087414 * t2   // anomalie de la Lune
+    let f  =  93.2720950 + 483202.0175233 * t - 0.0036539 * t2   // argument de latitude
+    func s(_ deg: Double) -> Double { sin(deg * Astro.DEG) }
+
+    let lon = lp
+        + 6.288774 * s(mp)
+        + 1.274027 * s(2 * dd - mp)
+        + 0.658314 * s(2 * dd)
+        + 0.213618 * s(2 * mp)
+        - 0.185116 * s(m)
+        - 0.114332 * s(2 * f)
+        + 0.058793 * s(2 * dd - 2 * mp)
+        + 0.057066 * s(2 * dd - m - mp)
+        + 0.053322 * s(2 * dd + mp)
+        + 0.045758 * s(2 * dd - m)
+        - 0.040923 * s(m - mp)
+        - 0.034720 * s(dd)
+        - 0.030383 * s(m + mp)
+        + 0.015327 * s(2 * dd - 2 * f)
+        - 0.012528 * s(mp + 2 * f)
+        + 0.010980 * s(mp - 2 * f)
+        + 0.010675 * s(4 * dd - mp)
+        + 0.010034 * s(3 * mp)
+
+    let lat = 5.128122 * s(f)
+        + 0.280602 * s(mp + f)
+        + 0.277693 * s(mp - f)
+        + 0.173237 * s(2 * dd - f)
+        + 0.055413 * s(2 * dd - mp + f)
+        + 0.046271 * s(2 * dd - mp - f)
+        + 0.032573 * s(2 * dd + f)
+        + 0.017198 * s(2 * mp + f)
+        + 0.009266 * s(2 * dd + mp - f)
+        + 0.008822 * s(2 * mp - f)
+
+    return (lon.truncatingRemainder(dividingBy: 360), lat)
+}
+
+/// Position d'une lune dans le repère de sa planète.
+///
+/// Le repère est celui des planètes : une longitude écliptique λ se pose en
+/// `(cos λ, ·, −sin λ)`. Le signe de z importe — avec `+sin λ` les lunes
+/// tournaient à l'envers, à contresens de tout le reste de la scène.
+///
+/// La Lune suit son éphéméride. Les vingt et une autres gardent un angle
+/// uniforme de période réelle et une phase d'écartement : leur longitude vraie
+/// ne se vérifie pas d'en bas, et une série par lune n'apprendrait rien.
+func moonLocalPosition(_ spec: MoonSpec, phase: Double, radius: Double, day d: Double) -> SIMD3<Double> {
+    if spec.hasEphemeris {
+        let e = moonEcliptic(day: d)
+        let l = e.lon * Astro.DEG, b = e.lat * Astro.DEG
+        return SIMD3(cos(b) * cos(l) * radius, sin(b) * radius, -cos(b) * sin(l) * radius)
+    }
+    let a = moonAngle(phase: phase, period: spec.period, day: d)
+    return SIMD3(cos(a) * radius, sin(a * 0.7) * 0.18, -sin(a) * radius)
 }

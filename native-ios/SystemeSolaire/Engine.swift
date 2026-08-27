@@ -1204,14 +1204,28 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     /// refermé, et qui passe exactement par la lune à l'instant du tracé.
     private func orbitArc(_ moon: MoonBody, radius: Double, sweep: Double) -> SCNGeometry? {
         guard sweep > 0.004 else { return nil }
-        let head = moonAngle(phase: moon.phase, period: moon.spec.period, day: day)
-        let lift = sin(head * 0.7) * 0.18 // hauteur de la lune à cet instant
         let steps = max(2, Int(72 * sweep))
-        let points = (0...steps).map { k -> SIMD3<Double> in
-            // k = steps tombe pile sur la lune ; la queue recule à mesure que
-            // l'arc s'allonge, et le cercle se referme sur elle.
-            let a = head - Astro.TAU * sweep * (1 - Double(k) / Double(steps))
-            return SIMD3(cos(a) * radius, lift * cos(a - head), sin(a) * radius)
+        let points: [SIMD3<Double>]
+        if moon.spec.hasEphemeris {
+            // La Lune a une éphéméride : son anneau est échantillonné dans le
+            // temps et non en angle, donc le trait est exactement le chemin
+            // qu'elle vient de prendre. Il se referme à un cheveu près — la
+            // ligne des nœuds tourne d'un degré et demi par mois.
+            let period = abs(moon.spec.period)
+            points = (0...steps).map { k in
+                let u = 1 - Double(k) / Double(steps)
+                return moonLocalPosition(moon.spec, phase: moon.phase, radius: radius,
+                                         day: day - period * sweep * u)
+            }
+        } else {
+            let head = moonAngle(phase: moon.phase, period: moon.spec.period, day: day)
+            let lift = sin(head * 0.7) * 0.18 // hauteur de la lune à cet instant
+            points = (0...steps).map { k -> SIMD3<Double> in
+                // k = steps tombe pile sur la lune ; la queue recule à mesure que
+                // l'arc s'allonge, et le cercle se referme sur elle.
+                let a = head - Astro.TAU * sweep * (1 - Double(k) / Double(steps))
+                return SIMD3(cos(a) * radius, lift * cos(a - head), -sin(a) * radius)
+            }
         }
         return Geo.lineGeometry(points: points, color: uiColor(0xece2ff), additive: true)
     }
@@ -1975,7 +1989,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             let push = system.planet === earth ? launchMoonPush : 0
             for moon in system.moons {
                 let radius = moon.spec.radius + (Self.LAUNCH_MOON_RADIUS - moon.spec.radius) * push
-                moon.node.position = SCNVector3(moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: radius, day: day))
+                moon.node.position = SCNVector3(moonLocalPosition(moon.spec, phase: moon.phase, radius: radius, day: day))
                 moon.node.opacity = bodyOpacity
                 if abs(sweep - moon.drawnSweep) > 0.004 || abs(radius - moon.drawnRadius) > 0.001 {
                     moon.drawnSweep = sweep
@@ -1989,7 +2003,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                         let u = Double(k) / 71
                         let trailDay = day - trailDirection * span * u
                         let parent = planetPosition(system.planet.spec, day: trailDay)
-                        points.append(parent + moonLocalPosition(phase: moon.phase, period: moon.spec.period, radius: radius, day: trailDay))
+                        points.append(parent + moonLocalPosition(moon.spec, phase: moon.phase, radius: radius, day: trailDay))
                     }
                     moon.trail.update(points: points, opacity: trailStrength * 0.85 * sweep)
                 } else {
