@@ -38,7 +38,7 @@ struct ExplorerPanel: View {
                 withAnimation(.easeOut(duration: 0.18)) { engine.setExploreView(.none) }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(TypeScale.label)
                     .foregroundStyle(.white)
                     .frame(width: 34, height: 34)
                     .background(.white.opacity(0.1), in: Circle())
@@ -47,18 +47,96 @@ struct ExplorerPanel: View {
         .padding(.horizontal, 8)
     }
 
+    /// L'onglet actif garde l'inversion blanche : c'est l'idiome du sélecteur
+    /// segmenté d'iOS, et il ne concurrence rien puisqu'il n'y en a qu'un.
     private func tab(_ title: String, _ view: ExploreView) -> some View {
         let active = engine.exploreView == view
         return Button {
             engine.setExploreView(view)
         } label: {
             Text(title)
-                .font(.system(size: 11.5, weight: .heavy))
-                .foregroundStyle(active ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.6))
+                .font(TypeScale.label)
+                .foregroundStyle(active ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.62))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
                 .background(active ? Color(red: 0.96, green: 0.95, blue: 1) : .clear, in: RoundedRectangle(cornerRadius: 13))
         }
+    }
+}
+
+// MARK: - Ligne commune
+
+enum RowGlyph {
+    case symbol(String)
+    case text(String)
+}
+
+/// Ligne d'explorateur. Les trois onglets partagent exactement la même anatomie —
+/// pastille, nom, méta, appendice optionnel — pour que la grille ne change pas
+/// sous le doigt quand on passe de l'un à l'autre.
+struct ExplorerRow<Trailing: View>: View {
+    let color: UInt32
+    let glyph: RowGlyph
+    let title: String
+    let meta: String
+    let selected: Bool
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: RowStyle.gap) {
+            Group {
+                switch glyph {
+                case .symbol(let name): Image(systemName: name)
+                case .text(let value): Text(value)
+                }
+            }
+            .font(TypeScale.glyph)
+            .foregroundStyle(Color(red: 0.08, green: 0.09, blue: 0.22))
+            .frame(width: RowStyle.chip, height: RowStyle.chip)
+            .background(Color(uiColor: uiColor(color)), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(TypeScale.row)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(meta)
+                    .font(TypeScale.meta)
+                    .foregroundStyle(RowStyle.meta)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            trailing()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(minHeight: RowStyle.minHeight)
+        // La sélection se signale par un liseré et un fond à peine teinté. Un
+        // aplat blanc ferait de la ligne choisie l'objet le plus lumineux de
+        // l'écran — plus que l'astre, qui est pourtant le sujet.
+        .background(selected ? RowStyle.selectedFill : RowStyle.idleFill,
+                    in: RoundedRectangle(cornerRadius: RowStyle.radius))
+        .overlay(
+            RoundedRectangle(cornerRadius: RowStyle.radius)
+                .strokeBorder(selected ? RowStyle.selectedBorder : .clear, lineWidth: 1.5)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: RowStyle.radius))
+    }
+}
+
+extension ExplorerRow where Trailing == EmptyView {
+    init(color: UInt32, glyph: RowGlyph, title: String, meta: String, selected: Bool) {
+        self.init(color: color, glyph: glyph, title: title, meta: meta, selected: selected) { EmptyView() }
+    }
+}
+
+/// Note de bas de liste
+private struct ListNote: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(TypeScale.meta)
+            .foregroundStyle(.white.opacity(0.55))
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -68,42 +146,22 @@ struct MissionList: View {
     @EnvironmentObject var engine: Engine
 
     var body: some View {
-        VStack(spacing: 12) {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
-                ForEach(Array(engine.missions.enumerated()), id: \.offset) { _, mission in
-                    let selected = engine.selected == .mission(mission)
-                    Button {
-                        // Même animation qu'à l'ouverture : sinon une insertion
-                        // interrompue peut faire réapparaître le panneau.
-                        withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(mission.spec.n)
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32) : .white.opacity(0.8))
-                                .lineLimit(1)
-                            Text(mission.spec.valid)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32).opacity(0.58) : .white.opacity(0.48))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(selected ? Color(red: 0.96, green: 0.95, blue: 1) : Color(red: 0.047, green: 0.055, blue: 0.216).opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
-                        // La pastille entière répond, pas seulement les deux textes
-                        .contentShape(RoundedRectangle(cornerRadius: 12))
-                    }
+        VStack(spacing: 7) {
+            ForEach(engine.missions, id: \.spec.n) { mission in
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { engine.selectMission(mission) }
+                } label: {
+                    ExplorerRow(
+                        color: mission.spec.color,
+                        glyph: .symbol("paperplane.fill"),
+                        title: mission.spec.n,
+                        meta: mission.spec.valid,
+                        selected: engine.selected == .mission(mission)
+                    )
                 }
             }
-            Toggle(isOn: $engine.showAllMissions) {
-                Text("Afficher toutes les sondes")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-            }
-            .tint(Color(red: 0.46, green: 0.44, blue: 0.94))
         }
         .padding(.top, 4)
-        .id(engine.listVersion)
     }
 }
 
@@ -116,44 +174,26 @@ struct SatelliteList: View {
         VStack(spacing: 12) {
             VStack(spacing: 7) {
                 ForEach(Array(engine.satModels.enumerated()), id: \.offset) { _, model in
-                    let selected = engine.selected == .satellite(model)
                     Button {
                         withAnimation(.easeOut(duration: 0.18)) { engine.selectSatellite(model) }
                     } label: {
-                        HStack(spacing: 11) {
-                            Text(model.spec.icon)
-                                .font(.system(size: 17, weight: .heavy))
-                                .foregroundStyle(Color(red: 0.08, green: 0.09, blue: 0.22))
-                                .frame(width: 36, height: 36)
-                                .background(Color(uiColor: uiColor(model.spec.color)), in: RoundedRectangle(cornerRadius: 11))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(model.spec.n)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32) : .white)
-                                Text(engine.satelliteMeta(model))
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32).opacity(0.58) : .white.opacity(0.58))
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(10)
-                        .background(selected ? Color(red: 0.96, green: 0.95, blue: 1) : Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.28), in: RoundedRectangle(cornerRadius: 15))
-                        // La ligne entière répond, y compris le vide et les marges
-                        .contentShape(RoundedRectangle(cornerRadius: 15))
+                        ExplorerRow(
+                            color: model.spec.color,
+                            glyph: .text(model.spec.icon),
+                            title: model.spec.n,
+                            meta: engine.satelliteMeta(model),
+                            selected: engine.selected == .satellite(model)
+                        )
                     }
                 }
             }
             Toggle(isOn: $engine.showAllSatellites) {
                 Text("Afficher tous les satellites")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
+                    .font(TypeScale.label)
+                    .foregroundStyle(.white.opacity(0.8))
             }
             .tint(Color(red: 0.46, green: 0.44, blue: 0.94))
-            Text(engine.satelliteNote)
-                .font(.system(size: 9))
-                .foregroundStyle(.white.opacity(0.48))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ListNote(text: engine.satelliteNote)
         }
         .padding(.top, 4)
         .id(engine.listVersion)
@@ -171,47 +211,29 @@ struct LaunchList: View {
         VStack(spacing: 12) {
             VStack(spacing: 7) {
                 ForEach(engine.launchSpecs) { launch in
-                    let selected = engine.selectedLaunch == launch
                     Button {
                         withAnimation(.easeOut(duration: 0.18)) { engine.selectLaunch(launch) }
                     } label: {
-                        HStack(spacing: 11) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 15, weight: .heavy))
-                                .foregroundStyle(Color(red: 0.08, green: 0.09, blue: 0.22))
-                                .frame(width: 36, height: 36)
-                                .background(Color(uiColor: uiColor(launch.color)), in: RoundedRectangle(cornerRadius: 11))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(launch.n)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32) : .white)
-                                    .lineLimit(1)
-                                Text(launch.meta)
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32).opacity(0.58) : .white.opacity(0.58))
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 4)
-                            VStack(alignment: .trailing, spacing: 3) {
+                        ExplorerRow(
+                            color: launch.color,
+                            glyph: .symbol("arrow.up"),
+                            title: launch.n,
+                            meta: launch.meta,
+                            selected: engine.selectedLaunch == launch
+                        ) {
+                            VStack(alignment: .trailing, spacing: 2) {
                                 Text(countdown(launch))
-                                    .font(.system(size: 10, weight: .heavy))
-                                    .foregroundStyle(selected ? Color(red: 0.24, green: 0.48, blue: 0.43) : Color(red: 0.62, green: 0.95, blue: 0.86))
+                                    .font(TypeScale.label)
+                                    .foregroundStyle(Color(red: 0.62, green: 0.95, blue: 0.86))
                                 Text(launch.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(selected ? Color(red: 0.145, green: 0.145, blue: 0.32).opacity(0.55) : .white.opacity(0.55))
+                                    .font(TypeScale.meta)
+                                    .foregroundStyle(RowStyle.meta)
                             }
                         }
-                        .padding(10)
-                        .background(selected ? Color(red: 0.96, green: 0.95, blue: 1) : Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.28), in: RoundedRectangle(cornerRadius: 15))
-                        // La ligne entière répond, y compris le vide et les marges
-                        .contentShape(RoundedRectangle(cornerRadius: 15))
                     }
                 }
             }
-            Text("Fenêtres indicatives · trajectoire non télémétrique")
-                .font(.system(size: 9))
-                .foregroundStyle(.white.opacity(0.48))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ListNote(text: "Fenêtres indicatives · trajectoire non télémétrique")
         }
         .padding(.top, 4)
         .id(engine.launchListVersion)

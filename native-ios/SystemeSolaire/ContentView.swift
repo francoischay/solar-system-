@@ -44,7 +44,7 @@ struct ContentView: View {
         HStack {
             Spacer()
             Button("Aujourd’hui") { engine.goToToday() }
-                .font(.system(size: 12, weight: .bold))
+                .font(TypeScale.label)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -58,8 +58,9 @@ struct ContentView: View {
 
     private func dock(maxSheetHeight: CGFloat, availableWidth: CGFloat) -> some View {
         let progress = max(0, min(1, dockExpansionProgress))
-        let compactWidth = max(120, availableWidth - 112)
-        let sheetWidth = compactWidth + (availableWidth - compactWidth) * progress
+        let groupWidth = min(availableWidth, DockMetrics.maxGroupWidth)
+        let compactWidth = max(120, groupWidth - DockMetrics.sideInset)
+        let sheetWidth = compactWidth + (groupWidth - compactWidth) * progress
         let iconScale = 1 - progress * 0.75
 
         return ZStack(alignment: .bottom) {
@@ -71,9 +72,9 @@ struct ContentView: View {
                     scaleMenuOpen = false
                 } label: {
                     Text(viewGlyph)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(TypeScale.glyph)
                         .foregroundStyle(engine.exploreView != .none ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.9))
-                        .frame(width: 46, height: 46)
+                        .frame(width: DockMetrics.height, height: DockMetrics.height)
                         .background(engine.exploreView != .none ? AnyShapeStyle(Color(red: 0.96, green: 0.95, blue: 1)) : AnyShapeStyle(GlassStyle.fill), in: Circle())
                         .overlay(Circle().strokeBorder(GlassStyle.border, lineWidth: 1))
                 }
@@ -86,9 +87,11 @@ struct ContentView: View {
                     withAnimation(.easeOut(duration: 0.16)) { scaleMenuOpen.toggle() }
                 } label: {
                     Text(engine.scaleShort)
-                        .font(.system(size: 15, weight: .bold))
+                        // Une valeur, pas un pictogramme : elle se lit en corps de
+                        // libellé, sinon les deux cercles se ressemblent trop.
+                        .font(TypeScale.label)
                         .foregroundStyle(scaleMenuOpen ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.9))
-                        .frame(width: 46, height: 46)
+                        .frame(width: DockMetrics.height, height: DockMetrics.height)
                         .background(scaleMenuOpen ? AnyShapeStyle(Color(red: 0.96, green: 0.95, blue: 1)) : AnyShapeStyle(GlassStyle.fill), in: Circle())
                         .overlay(Circle().strokeBorder(GlassStyle.border, lineWidth: 1))
                 }
@@ -102,10 +105,12 @@ struct ContentView: View {
 
             InfoCard(
                 maxHeight: maxSheetHeight,
+                expandedWidth: groupWidth,
                 expansionProgress: $dockExpansionProgress
             )
             .frame(width: sheetWidth)
         }
+        .frame(width: groupWidth)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -147,6 +152,44 @@ struct SpaceBackground: View {
     }
 }
 
+/// Quatre crans, deux graisses. Neuf tailles circulaient auparavant, dont des
+/// écarts d'un demi-point (11,5 vs 12) qui ne se voient pas : ce n'était pas une
+/// échelle, c'était de la dérive. Tout ce qui vivait entre deux crans a choisi.
+enum TypeScale {
+    static let title = Font.system(size: 17, weight: .semibold)   // titre du cartouche
+    static let glyph = Font.system(size: 17, weight: .semibold)   // pictogrammes
+    static let row = Font.system(size: 15, weight: .semibold)     // nom dans une liste
+    static let body = Font.system(size: 15)                       // texte courant
+    static let label = Font.system(size: 13, weight: .semibold)   // onglets, boutons, valeurs
+    static let tag = Font.system(size: 11, weight: .semibold)     // étiquettes sur la scène
+    static let meta = Font.system(size: 11)                       // métadonnées
+}
+
+/// Anatomie commune aux lignes de l'explorateur : même hauteur, même rayon, même
+/// pastille, quel que soit l'onglet.
+enum RowStyle {
+    static let minHeight: CGFloat = 48
+    static let radius: CGFloat = 14
+    static let chip: CGFloat = 34
+    static let gap: CGFloat = 11
+    static let idleFill = Color(red: 0.043, green: 0.05, blue: 0.2).opacity(0.28)
+    static let selectedFill = Color(red: 0.62, green: 0.6, blue: 1).opacity(0.2)
+    static let selectedBorder = Color(red: 0.78, green: 0.79, blue: 1).opacity(0.75)
+    static let meta = Color.white.opacity(0.62)
+}
+
+/// Le dock est une rangée : les deux cercles et le cartouche replié partagent
+/// une hauteur unique, sinon rien ne s'aligne. Les cercles restent des cercles,
+/// c'est donc leur diamètre qui suit.
+enum DockMetrics {
+    static let height: CGFloat = 58
+    /// Place à réserver de part et d'autre du cartouche : deux cercles et leurs gouttières
+    static let sideInset: CGFloat = height * 2 + 20
+    /// Sur iPad le dock ne s'étire pas jusqu'aux bords : au-delà, le cartouche
+    /// devient une barre et les deux boutons partent aux antipodes.
+    static let maxGroupWidth: CGFloat = 560
+}
+
 enum GlassStyle {
     static let fill = LinearGradient(
         colors: [Color(red: 0.48, green: 0.46, blue: 0.88).opacity(0.26), Color(red: 0.12, green: 0.13, blue: 0.36).opacity(0.3)],
@@ -176,7 +219,7 @@ struct LabelsOverlay: View {
         ZStack {
             ForEach(engine.labels) { label in
                 Text(label.text)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(TypeScale.tag)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
@@ -195,15 +238,26 @@ struct LabelsOverlay: View {
 struct InfoCard: View {
     @EnvironmentObject var engine: Engine
     let maxHeight: CGFloat
+    /// Largeur qu'aura le cartouche une fois déplié — le paragraphe doit être
+    /// mesuré à cette largeur-là. Mesuré replié, il tenait sur sept lignes au
+    /// lieu de cinq et réservait la place de deux lignes fantômes.
+    let expandedWidth: CGFloat
     @Binding var expansionProgress: CGFloat
     @State private var detailExpanded = false
     @State private var sheetHeight: CGFloat = 58
+    @State private var detailHeight: CGFloat = 0
     @State private var dragStartHeight: CGFloat?
     @State private var isDragging = false
 
-    private let minHeight: CGFloat = 58
+    private let minHeight: CGFloat = DockMetrics.height
 
     private var clampedMaxHeight: CGFloat { max(minHeight, maxHeight) }
+    /// Le cartouche se calait sur la moitié de l'écran quel que soit son texte —
+    /// six lignes pour la Terre, et le reste en vide. Il prend maintenant la
+    /// hauteur de son contenu, sans dépasser la moitié.
+    private var expandedHeight: CGFloat {
+        detailHeight > 1 ? min(clampedMaxHeight, minHeight + detailHeight) : clampedMaxHeight
+    }
     var body: some View {
         let progress = expansionProgress
         let cornerRadius = 29 - progress * 7
@@ -214,7 +268,7 @@ struct InfoCard: View {
             if let detail = engine.selectionDetail {
                 ScrollView {
                     Text(DateLinker.attributed(detail))
-                    .font(.system(size: 15))
+                    .font(TypeScale.body)
                     .lineSpacing(4.5)
                     .foregroundStyle(.white.opacity(0.74))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,6 +291,11 @@ struct InfoCard: View {
             }
         }
         .frame(maxWidth: .infinity)
+        // Exemplaire caché du paragraphe, mesuré à hauteur libre. Mesurer le vrai
+        // texte ne marche pas : il vit dans une ScrollView dont la hauteur découle
+        // de la mesure, et les deux se poursuivent jusqu'à un équilibre trop haut.
+        .background(detailProbe.hidden())
+        .onPreferenceChange(DetailHeightKey.self) { detailHeight = $0 }
         .frame(height: sheetHeight, alignment: .top)
         .background(GlassStyle.fill, in: shape)
         .background(.ultraThinMaterial, in: shape)
@@ -251,10 +310,15 @@ struct InfoCard: View {
         .onChange(of: engine.selectionDetail) {
             if engine.selectionDetail == nil { snap(expanded: false) }
         }
+        // La zone libre change avec le texte : la scène doit savoir où recentrer.
+        // +8 pour la marge basse du dock, qui appartient à la zone occupée.
+        .onChange(of: expandedHeight, initial: true) {
+            engine.setDetailCoverage(Double((expandedHeight + 8) / max(1, maxHeight * 2)))
+        }
         .onChange(of: maxHeight) {
             guard detailExpanded else { return }
             withAnimation(.spring(duration: 0.32, bounce: 0)) {
-                sheetHeight = clampedMaxHeight
+                sheetHeight = expandedHeight
             }
         }
         .onAppear {
@@ -287,12 +351,12 @@ struct InfoCard: View {
 
             VStack(spacing: 2) {
                 Text(engine.selectionTitle)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(TypeScale.title)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text(engine.selectionSub)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.58))
+                Text(subtitle)
+                    .font(TypeScale.label)
+                    .foregroundStyle(.white.opacity(0.62))
                     .lineLimit(1)
             }
             .padding(.horizontal, 44)
@@ -306,8 +370,11 @@ struct InfoCard: View {
                     Button {
                         snap(expanded: !detailExpanded)
                     } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
+                        // Le chevron montre où va le contenu, pas d'où il vient :
+                        // vers le haut quand il reste à déplier, vers le bas quand
+                        // il ne reste qu'à refermer. C'était l'inverse.
+                        Image(systemName: "chevron.up")
+                            .font(TypeScale.tag)
                             .foregroundStyle(.white.opacity(0.75))
                             .frame(width: 28, height: 28)
                             .background(.white.opacity(0.1), in: Circle())
@@ -322,6 +389,35 @@ struct InfoCard: View {
             }
         }
         .frame(height: minHeight)
+    }
+
+    /// Panneau ouvert, la capsule affichait encore « Explorer les orbites » alors
+    /// qu'on choisissait une sonde : la plus large zone de l'écran portait
+    /// l'information la plus périmée.
+    private var subtitle: String {
+        switch engine.exploreView {
+        case .none: return engine.selectionSub
+        case .missions: return "Choisir une sonde"
+        case .satellites: return "Choisir un satellite"
+        case .launches: return "Choisir un lancement"
+        }
+    }
+
+    @ViewBuilder private var detailProbe: some View {
+        if let detail = engine.selectionDetail {
+            Text(DateLinker.attributed(detail))
+                .font(TypeScale.body)
+                .lineSpacing(4.5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 16)
+                .frame(width: max(120, expandedWidth))
+                .fixedSize(horizontal: false, vertical: true)
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: DetailHeightKey.self, value: proxy.size.height)
+                })
+        }
     }
 
     private var sheetDragGesture: some Gesture {
@@ -360,10 +456,17 @@ struct InfoCard: View {
         }
         detailExpanded = shouldExpand
         withAnimation(.spring(duration: 0.32, bounce: 0)) {
-            sheetHeight = shouldExpand ? clampedMaxHeight : minHeight
+            sheetHeight = shouldExpand ? expandedHeight : minHeight
             expansionProgress = shouldExpand ? 1 : 0
         }
         engine.setDetailExpansionProgress(shouldExpand ? 1 : 0, immediate: false)
+    }
+}
+
+private struct DetailHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
@@ -467,7 +570,7 @@ struct ScaleMenu: View {
                     withAnimation(.easeOut(duration: 0.16)) { open = false }
                 } label: {
                     Text(option.0)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(TypeScale.label)
                         .foregroundStyle(active ? Color(red: 0.13, green: 0.14, blue: 0.32) : .white.opacity(0.68))
                         .frame(minWidth: 92, alignment: .leading)
                         .padding(.horizontal, 13)

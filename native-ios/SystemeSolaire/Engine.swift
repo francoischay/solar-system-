@@ -151,6 +151,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     var spacecraftZoomScale = 1.0
     private var detailExpansionProgress = 0.0
     private var detailExpansionTarget = 0.0
+    /// Part de la hauteur d'écran que le cartouche déplié recouvre. Elle variait
+    /// autrefois : c'était toujours la moitié. Depuis que le cartouche épouse son
+    /// texte, la zone libre change avec lui et la scène doit se recentrer dedans.
+    private var detailCoverage = 0.5
 
     var selected: Selection? {
         didSet {
@@ -1043,6 +1047,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         if immediate { detailExpansionProgress = clamped }
     }
 
+    func setDetailCoverage(_ fraction: Double) {
+        detailCoverage = max(0, min(0.85, fraction))
+    }
+
     /// Recul nécessaire pour qu'un disque de rayon `radius` centré à l'écran
     /// tienne dans le cadre, portrait compris.
     func frameDistance(radius: Double, margin: Double = 1.1) -> Double {
@@ -1087,10 +1095,12 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         aim(at: target)
 
         guard detailExpansionProgress > 0.001, selected != nil else { return }
-        // À 100 %, la cible est projetée au centre de la moitié haute (25 % de
-        // l'écran). On vise donc sous elle d'une demi-hauteur de frustum.
+        // L'astre se cale au centre de ce que le cartouche laisse libre. Viser
+        // sous lui d'une hauteur `demi-frustum × recouvrement` l'y amène : avec un
+        // recouvrement d'une demi-hauteur, on retrouve exactement l'ancien
+        // cadrage au quart supérieur, mais il suit maintenant la taille réelle.
         let verticalHalfSpan = dist * tan(46.0 / 2 * Astro.DEG)
-        let offset = verticalHalfSpan * 0.5 * detailExpansionProgress
+        let offset = verticalHalfSpan * detailCoverage * detailExpansionProgress
         aim(at: target - cameraNode.worldUp.simd3 * offset)
     }
 
