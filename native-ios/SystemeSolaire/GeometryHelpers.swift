@@ -181,6 +181,40 @@ enum Geo {
         )
     }
 
+    /// Anneau dans le plan XY, pour un liseré d'atmosphère face à la caméra.
+    ///
+    /// Deux différences avec `ringGeometry`, et elles comptent toutes les deux.
+    /// Le plan est XY et non XZ : l'anneau est fait pour être tourné vers l'oeil,
+    /// pas posé à plat autour d'une planète. Et `v` porte l'angle le long du
+    /// cercle au lieu d'une constante — c'est ce qui permet d'éteindre le liseré
+    /// du côté nuit. `u` reste le radial, de 0 au bord intérieur à 1 au bord
+    /// extérieur. `v = 0` tombe sur +X : c'est de ce côté qu'on met le Soleil.
+    static func limbRing(inner: Double, outer: Double, segments: Int = 96) -> SCNGeometry {
+        var vertices: [SCNVector3] = [], uvs: [CGPoint] = [], normals: [SCNVector3] = []
+        var indices: [Int32] = []
+        for i in 0...segments {
+            let v = Double(i) / Double(segments)
+            let a = v * Astro.TAU
+            let c = cos(a), sn = sin(a)
+            vertices.append(SCNVector3(Float(c * inner), Float(sn * inner), 0))
+            vertices.append(SCNVector3(Float(c * outer), Float(sn * outer), 0))
+            uvs.append(CGPoint(x: 0, y: v)); uvs.append(CGPoint(x: 1, y: v))
+            normals.append(SCNVector3(0, 0, 1)); normals.append(SCNVector3(0, 0, 1))
+        }
+        for i in 0..<segments {
+            let o = Int32(i * 2)
+            indices.append(contentsOf: [o, o + 1, o + 2, o + 2, o + 1, o + 3])
+        }
+        return SCNGeometry(
+            sources: [
+                SCNGeometrySource(vertices: vertices),
+                SCNGeometrySource(normals: normals),
+                SCNGeometrySource(textureCoordinates: uvs),
+            ],
+            elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)]
+        )
+    }
+
     /// Calotte sphérique centrée sur +Y, posée sur une sphère de ce rayon.
     /// Sert à peindre une tache *sur* le globe : une pastille plate flotterait
     /// au-dessus, et l'ombre d'une éclipse couvre un tiers du disque terrestre.

@@ -576,6 +576,36 @@ struct MoonSpec {
     var hasEphemeris: Bool { name == "Lune" }
 }
 
+/// Ce qu'on voit d'une atmosphère quand on regarde une planète de loin : un
+/// liseré sur le limbe, pas une couche qu'on traverse. La couleur est celle que
+/// la diffusion renvoie — le bleu de Rayleigh pour la Terre, le voile d'acide
+/// sulfurique de Vénus, l'ocre pâle de la poussière martienne, le méthane des
+/// géantes de glace.
+///
+/// `extent` est une fraction du rayon de la planète, pas une hauteur réelle :
+/// l'atmosphère terrestre fait un demi pour cent du rayon, elle serait
+/// invisible. On suggère sa présence, on ne la mesure pas — mais on reste dans
+/// l'ordre de grandeur d'un trait, pas d'une frange : au-delà d'un dixième de
+/// rayon, ça ne se lit plus comme une atmosphère mais comme un halo posé.
+///
+/// Mercure et la Lune n'y sont pas, et c'est le propos : elles n'en ont pas.
+/// Leur limbe nu, à côté du liseré de Vénus, dit quelque chose de vrai.
+struct AtmosphereSpec {
+    let color: UInt32
+    let extent: Double    // fraction du rayon
+    let strength: Double  // 0 à 1
+}
+
+let planetAtmospheres: [String: AtmosphereSpec] = [
+    "Vénus": AtmosphereSpec(color: 0xfff0cc, extent: 0.10, strength: 0.90),
+    "Terre": AtmosphereSpec(color: 0x8ccbff, extent: 0.07, strength: 0.85),
+    "Mars": AtmosphereSpec(color: 0xe0b48c, extent: 0.05, strength: 0.38),
+    "Jupiter": AtmosphereSpec(color: 0xf0d8b4, extent: 0.055, strength: 0.48),
+    "Saturne": AtmosphereSpec(color: 0xf2e4c4, extent: 0.05, strength: 0.42),
+    "Uranus": AtmosphereSpec(color: 0xbdf0ee, extent: 0.06, strength: 0.55),
+    "Neptune": AtmosphereSpec(color: 0x9dbcf8, extent: 0.06, strength: 0.55),
+]
+
 let moonSpecs: [String: [MoonSpec]] = [
     "Terre": [MoonSpec(name: "Lune", radius: 3.1, size: 0.42, color: 0xc9cfdf, period: 27.32)],
     "Mars": [

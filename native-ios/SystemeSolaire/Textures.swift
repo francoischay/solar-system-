@@ -265,6 +265,51 @@ final class TextureLoader {
         }
     }
 
+    /// Dégradé d'un liseré d'atmosphère, du limbe de la planète vers le vide.
+    /// Liseré d'atmosphère : une image à deux dimensions, radial en largeur,
+    /// angulaire en hauteur.
+    ///
+    /// En largeur, le profil monte puis retombe — le trait le plus clair n'est
+    /// pas collé au sol mais un peu au-dessus, comme sur les photos prises
+    /// depuis l'orbite. Un dégradé qui part du maximum au contact donnait un
+    /// halo posé sur la planète, pas une atmosphère.
+    ///
+    /// En hauteur, `cos` de l'angle : le liseré vit du côté du Soleil et meurt
+    /// au terminateur. `v = 0` est le point subsolaire, et comme le cosinus
+    /// vaut la même chose en 0 et en 1, la couture ne se voit pas.
+    ///
+    /// C'est l'alpha qui porte tout, pas la couleur : un dégradé opaque vers le
+    /// noir semblait plus simple — en `add`, du noir n'ajoute rien — mais le
+    /// mode de fusion n'est pas honoré sur une texture opaque, et l'anneau se
+    /// dessinait en disque noir autour de la planète.
+    static func limbGlow(color: UIColor, strength: Double) -> UIImage {
+        let w = 96, h = 128, peak = 0.16
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: w, height: h), format: {
+            let f = UIGraphicsImageRendererFormat()
+            f.scale = 1
+            f.opaque = false
+            return f
+        }())
+        return renderer.image { rendererCtx in
+            let ctx = rendererCtx.cgContext
+            for y in 0..<h {
+                let v = Double(y) / Double(h)
+                let lit = max(0, cos(v * Astro.TAU))
+                let angular = pow(lit, 0.6)
+                guard angular > 0.001 else { continue }
+                for x in 0..<w {
+                    let u = Double(x) / Double(w - 1)
+                    let radial = u < peak ? u / peak : pow((1 - u) / (1 - peak), 2.4)
+                    ctx.setFillColor(red: r, green: g, blue: b,
+                                     alpha: CGFloat(radial * angular * strength))
+                    ctx.fill(CGRect(x: x, y: y, width: 1, height: 1))
+                }
+            }
+        }
+    }
+
     /// Dégradé d'un cône d'ombre, à lire de gauche (l'axe) à droite (le bord).
     /// La texture est en niveaux de gris et se compose en `multiply` : le blanc
     /// ne change rien, le sombre assombrit ce qu'il y a dessous. C'est bien une

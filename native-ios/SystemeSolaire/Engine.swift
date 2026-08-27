@@ -13,6 +13,10 @@ final class Planet {
     let orbitNode = SCNNode()
     var orbitOpacity = 0.0
     var orbitOpacityVelocity = 0.0
+    /// Liseré d'atmosphère. Le parent regarde la caméra, l'assiette tourne dans
+    /// son plan pour mettre le Soleil du bon côté — d'où les deux références.
+    var limbBillboard: SCNNode?
+    var limbPlate: SCNNode?
     let trail: TrailLine
     var moonSystem: MoonSystem?
     init(spec: PlanetSpec) {
@@ -394,8 +398,16 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     @Published var listVersion = 0
     @Published var launchListVersion = 0
     @Published var scaleShort = "J"
+    /// Position du Soleil dans le cadre, normalisée de 0 à 1. SwiftUI s'en sert
+    /// comme d'une vraie source : les reflets des verres changent de côté quand
+    /// la caméra tourne autour de la scène.
+    @Published var sunScreenPosition = CGPoint(x: 0.5, y: 0.32)
+    @Published var sunInterfaceIntensity: CGFloat = 0.7
 
     private var lastFrameTime: TimeInterval = 0
+    private var lastSunInterfaceUpdate: TimeInterval = 0
+    private var queuedSunScreenPosition = CGPoint(x: 0.5, y: 0.32)
+    private var queuedSunInterfaceIntensity: CGFloat = 0.7
     private var previousDay = Astro.todayDay
     private var timeVelocity = 0.0, trailEnergy = 0.0, trailDirection = 1.0
     private var lastBornSignature = ""
@@ -521,6 +533,12 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             material.shininess = 8
             sphere.materials = [material]
             planet.node.geometry = sphere
+            if let air = planetAtmospheres[spec.name] {
+                let billboard = makeAtmosphere(air, radius: spec.size)
+                planet.limbBillboard = billboard
+                planet.limbPlate = billboard.childNodes.first
+                planet.node.addChildNode(billboard)
+            }
             scene.rootNode.addChildNode(planet.node)
             scene.rootNode.addChildNode(planet.trail.node)
             if spec.name == "Terre" {
@@ -749,6 +767,56 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         model.node.isHidden = true
         scene.rootNode.addChildNode(model.node)
         return model
+    }
+
+    /// Liseré d'atmosphère sur le limbe d'une planète.
+    ///
+    /// Un anneau face à la caméra, pas une sphère : pour une sphère, le limbe
+    /// *est* un cercle vu de n'importe où, donc un anneau tourné vers l'oeil
+    /// épouse exactement le bord — sans shader, et juste sous tous les angles.
+    /// La contrainte de billboard écrase l'orientation du noeud, d'où l'anneau
+    /// dans un enfant : le parent regarde la caméra, l'enfant tourne dans le
+    /// plan pour poser le point le plus clair du côté du Soleil.
+    ///
+    /// Il commence un demi pour cent au-dessus du sol et son maximum est encore
+    /// au-dessus : c'est un trait décollé de la planète, pas une frange sur son
+    /// bord. Il ne s'écrit pas dans le tampon de profondeur mais le lit, donc
+    /// une lune qui passe devant le coupe.
+    private func makeAtmosphere(_ air: AtmosphereSpec, radius: Double) -> SCNNode {
+        let ring = Geo.limbRing(inner: radius * 1.005, outer: radius * (1 + air.extent))
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = TextureLoader.limbGlow(
+            color: uiColor(air.color), strength: air.strength)
+        material.diffuse.wrapS = .clamp
+        material.diffuse.wrapT = .repeat
+        material.blendMode = .add
+        material.isDoubleSided = true
+        material.writesToDepthBuffer = false
+        material.readsFromDepthBuffer = true
+        ring.materials = [material]
+
+        let plate = SCNNode(geometry: ring)
+        let billboard = SCNNode()
+        billboard.constraints = [SCNBillboardConstraint()]
+        billboard.addChildNode(plate)
+        return billboard
+    }
+
+    /// Tourne le liseré pour que son point le plus clair regarde le Soleil.
+    ///
+    /// Le Soleil est à l'origine de la scène : vu de la planète, il est dans la
+    /// direction opposée à sa position. On exprime cette direction dans le
+    /// repère du billboard — donc déjà rapportée au plan de l'écran — et
+    /// l'angle qu'elle y fait est celui qu'il faut donner à l'assiette. C'est
+    /// la présentation qu'on interroge, pas le modèle : la contrainte n'écrit
+    /// que là.
+    private func aimAtmosphere(_ planet: Planet) {
+        guard let plate = planet.limbPlate, let billboard = planet.limbBillboard else { return }
+        let toSun = -SIMD3<Float>(planet.node.simdPosition)
+        guard simd_length(toSun) > 0 else { return }
+        let local = billboard.presentation.simdConvertVector(simd_normalize(toSun), from: nil)
+        plate.eulerAngles.z = atan2(local.y, local.x)
     }
 
     // MARK: Géolocalisation
@@ -1860,6 +1928,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 velocity: &planet.orbitOpacityVelocity, smoothTime: 0.4, deltaTime: dt
             )
             planet.orbitNode.opacity = CGFloat(planet.orbitOpacity)
+            aimAtmosphere(planet)
             if planet.spec.name != "Terre" {
                 planet.node.eulerAngles.y = Float(day * 0.015 / (1 + Double(planet.spec.index) * 0.15))
             }
@@ -2304,6 +2373,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         placeCamera()
 
         updateDateText()
+        updateSunInterfaceLight(at: time)
         updateLabels()
 
         // Pendant un rejeu, le bouton n'a rien à proposer : on regarde une
@@ -2546,6 +2616,68 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     private lazy var constellationSprite = ProceduralTexture.dotSprite()
+
+    /// Projette l'étoile dans le même repère que l'interface. Trente mesures par
+    /// seconde suffisent pour un reflet et évitent de republier tout SwiftUI à
+    /// chaque image SceneKit. La position peut sortir légèrement du cadre : le
+    /// bord éclairé continue ainsi d'indiquer où se trouve le Soleil hors champ.
+    private func updateSunInterfaceLight(at time: TimeInterval) {
+        guard time - lastSunInterfaceUpdate >= 1.0 / 30.0,
+              let view = scnView,
+              view.bounds.width > 1, view.bounds.height > 1 else { return }
+        lastSunInterfaceUpdate = time
+
+        let projected = view.projectPoint(sunNode.presentation.worldPosition)
+        let inFront = projected.z > 0 && projected.z < 1
+        let position: CGPoint
+        if inFront {
+            position = CGPoint(
+                x: max(-0.45, min(1.45, CGFloat(projected.x) / view.bounds.width)),
+                y: max(-0.45, min(1.45, CGFloat(projected.y) / view.bounds.height))
+            )
+        } else {
+            // `projectPoint` retourne une direction visuellement inversée une
+            // fois la source derrière la caméra. Pendant le suivi rapproché
+            // d'une mission, on conserve donc sa vraie direction dans le plan
+            // de l'écran à partir des axes droit/haut de la caméra.
+            let toSun = sunNode.presentation.worldPosition.simd3
+                - cameraNode.presentation.worldPosition.simd3
+            let side = simd_dot(toSun, cameraNode.presentation.worldRight.simd3)
+            let vertical = simd_dot(toSun, cameraNode.presentation.worldUp.simd3)
+            let lateral = hypot(side, vertical)
+            if lateral > 1e-5 {
+                position = CGPoint(
+                    x: 0.5 + CGFloat(side / lateral) * 0.9,
+                    y: 0.5 - CGFloat(vertical / lateral) * 0.9
+                )
+            } else {
+                // Soleil exactement dans l'axe arrière : aucune direction
+                // latérale n'est physiquement définie. Garder la dernière évite
+                // que le reflet saute arbitrairement d'un bord à l'autre.
+                position = queuedSunScreenPosition
+            }
+        }
+
+        let x = position.x
+        let y = position.y
+        let outsideX = max(0, abs(x - 0.5) - 0.5)
+        let outsideY = max(0, abs(y - 0.5) - 0.5)
+        let outside = hypot(outsideX, outsideY)
+        // Hors champ ne veut pas dire éteint : la source continue d'éclairer
+        // les surfaces. C'est particulièrement visible pendant une mission,
+        // lorsque la caméra regarde un vaisseau avec le Soleil dans son dos.
+        let intensity: CGFloat = inFront ? max(0.58, 1 - outside * 0.58) : 0.56
+
+        guard hypot(position.x - queuedSunScreenPosition.x,
+                    position.y - queuedSunScreenPosition.y) > 0.0025
+                || abs(intensity - queuedSunInterfaceIntensity) > 0.015 else { return }
+        queuedSunScreenPosition = position
+        queuedSunInterfaceIntensity = intensity
+        DispatchQueue.main.async {
+            self.sunScreenPosition = position
+            self.sunInterfaceIntensity = intensity
+        }
+    }
 
     private func buildSatelliteOrbit(_ model: SatModel, aroundDay: Double) {
         guard let member = model.primary, let orbitNode = model.orbitNode else { return }
