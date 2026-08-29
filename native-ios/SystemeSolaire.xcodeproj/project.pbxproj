@@ -8,14 +8,53 @@
 
 /* Begin PBXBuildFile section */
 		A100000000000000000000C3 /* SatelliteKit in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000C2 /* SatelliteKit */; };
+		B20000000000000000000001 /* SystemeSolaireWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* SystemeSolaireWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B20000000000000000000013 /* earth_atmos_4096-cosmic-v2.jpg in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000011 /* earth_atmos_4096-cosmic-v2.jpg */; };
+		B20000000000000000000014 /* moonmap1k-cosmic.jpg in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000012 /* moonmap1k-cosmic.jpg */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B20000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A100000000000000000000AA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B20000000000000000000008;
+			remoteInfo = SystemeSolaireWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B20000000000000000000004 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				B20000000000000000000001 /* SystemeSolaireWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A100000000000000000000A3 /* SystemeSolaire.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SystemeSolaire.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000002 /* SystemeSolaireWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SystemeSolaireWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000011 /* earth_atmos_4096-cosmic-v2.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "SystemeSolaire/Textures/earth_atmos_4096-cosmic-v2.jpg"; sourceTree = SOURCE_ROOT; };
+		B20000000000000000000012 /* moonmap1k-cosmic.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "SystemeSolaire/Textures/moonmap1k-cosmic.jpg"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A100000000000000000000A4 /* SystemeSolaire */ = {isa = PBXFileSystemSynchronizedRootGroup; path = SystemeSolaire; sourceTree = "<group>"; };
+		A100000000000000000000A4 /* SystemeSolaire */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SystemeSolaire;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000005 /* SystemeSolaireWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SystemeSolaireWatch;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -27,6 +66,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -34,6 +80,9 @@
 			isa = PBXGroup;
 			children = (
 				A100000000000000000000A4 /* SystemeSolaire */,
+				B20000000000000000000005 /* SystemeSolaireWatch */,
+				B20000000000000000000011 /* earth_atmos_4096-cosmic-v2.jpg */,
+				B20000000000000000000012 /* moonmap1k-cosmic.jpg */,
 				A100000000000000000000A2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -42,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				A100000000000000000000A3 /* SystemeSolaire.app */,
+				B20000000000000000000002 /* SystemeSolaireWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -56,10 +106,12 @@
 				A100000000000000000000A6 /* Sources */,
 				A100000000000000000000A7 /* Frameworks */,
 				A100000000000000000000A8 /* Resources */,
+				B20000000000000000000004 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B20000000000000000000009 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A100000000000000000000A4 /* SystemeSolaire */,
@@ -70,6 +122,28 @@
 			);
 			productName = SystemeSolaire;
 			productReference = A100000000000000000000A3 /* SystemeSolaire.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B20000000000000000000008 /* SystemeSolaireWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2000000000000000000000D /* Build configuration list for PBXNativeTarget "SystemeSolaireWatch" */;
+			buildPhases = (
+				B2000000000000000000000A /* Sources */,
+				B20000000000000000000006 /* Frameworks */,
+				B2000000000000000000000B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B20000000000000000000005 /* SystemeSolaireWatch */,
+			);
+			name = SystemeSolaireWatch;
+			packageProductDependencies = (
+			);
+			productName = SystemeSolaireWatch;
+			productReference = B20000000000000000000002 /* SystemeSolaireWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -83,6 +157,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					A100000000000000000000A5 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					B20000000000000000000008 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -99,11 +176,13 @@
 			packageReferences = (
 				A100000000000000000000C1 /* XCRemoteSwiftPackageReference "SatelliteKit" */,
 			);
+			preferredProjectObjectVersion = 77;
 			productRefGroup = A100000000000000000000A2 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				A100000000000000000000A5 /* SystemeSolaire */,
+				B20000000000000000000008 /* SystemeSolaireWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -113,6 +192,15 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2000000000000000000000B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000013 /* earth_atmos_4096-cosmic-v2.jpg in Resources */,
+				B20000000000000000000014 /* moonmap1k-cosmic.jpg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,7 +214,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B2000000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B20000000000000000000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B20000000000000000000008 /* SystemeSolaireWatch */;
+			targetProxy = B20000000000000000000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A100000000000000000000B2 /* Debug */ = {
@@ -177,10 +280,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5M6TWWK867;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Votre position est utilisée uniquement pour afficher un point sur le globe terrestre.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Les mouvements de l’appareil accompagnent légèrement la vue du système solaire.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = NO;
 				INFOPLIST_KEY_UIStatusBarHidden = NO;
@@ -205,10 +310,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5M6TWWK867;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Votre position est utilisée uniquement pour afficher un point sur le globe terrestre.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Les mouvements de l’appareil accompagnent légèrement la vue du système solaire.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = NO;
 				INFOPLIST_KEY_UIStatusBarHidden = NO;
@@ -224,6 +331,60 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B2000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.francoischay.solarsystem3d;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francoischay.solarsystem3d.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		B2000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.francoischay.solarsystem3d;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.francoischay.solarsystem3d.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
@@ -244,6 +405,15 @@
 			buildConfigurations = (
 				A100000000000000000000B2 /* Debug */,
 				A100000000000000000000B3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B2000000000000000000000D /* Build configuration list for PBXNativeTarget "SystemeSolaireWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B2000000000000000000000E /* Debug */,
+				B2000000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

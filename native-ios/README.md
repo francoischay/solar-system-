@@ -3,6 +3,21 @@
 Port natif Swift du prototype `assets/systeme-solaire-3d.html` : plus de WebView ni d'iframe.
 La scène 3D est rendue par SceneKit (Metal), l'interface par SwiftUI. iPhone et iPad.
 
+## Prototype Apple Watch
+
+Le target `SystemeSolaireWatch` propose un rejeu contemplatif des vols habités :
+interface SwiftUI, astres, véhicule et trajectoire rendus en 3D par SceneKit. La
+Digital Crown déplace directement le temps :
+vers le haut pour avancer, vers le bas pour revenir en arrière. La lecture se met
+en pause dès que la Crown bouge ; un tap la reprend depuis l'instant choisi. Les
+grandes étapes de la mission produisent un cran haptique. La caméra suit le
+véhicule et change de cadrage selon la phase du voyage ; la Terre et la Lune
+réutilisent les cartes et le mapping UV de l'app iPhone.
+
+Le prototype embarque trois formes de voyage volontairement différentes :
+Apollo 11 (orbite lunaire), Apollo 13 (retour libre) et Vostok 1 (orbite terrestre).
+Toucher le nom de la mission ouvre le sélecteur.
+
 ## Ce qui est porté (parité avec le prototype)
 
 - Orbites képlériennes J2000 (éléments JPL, équation de Kepler résolue par Newton), ellipses inclinées, distances comprimées en log, direction exacte.
@@ -53,4 +68,11 @@ SystemeSolaire/
 ├── SceneContainer.swift   # SCNView + gestes (rotation, pincement, sélection)
 ├── ContentView.swift      # dock, cartouche, timeline, menu d'échelle, fond
 └── ExplorerPanel.swift    # panneau Sondes / Satellites / Lancements
+
+SystemeSolaireWatch/
+├── SystemeSolaireWatchApp.swift # point d'entrée watchOS
+├── ContentView.swift             # Crown, lecture/pause et sélection
+├── MissionPlayer.swift           # temps simulé et crans haptiques
+├── MissionScene.swift            # scène, astres, véhicule et trace 3D SceneKit
+└── WatchMission.swift            # missions et étapes narratives
 ```

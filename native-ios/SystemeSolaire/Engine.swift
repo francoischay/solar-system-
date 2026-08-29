@@ -1,6 +1,7 @@
 import SceneKit
 import simd
 import CoreLocation
+import CoreMotion
 import UIKit
 
 // MARK: - Corps de scène
@@ -58,6 +59,11 @@ final class MoonSystem {
 final class Mission {
     let spec: MissionSpec
     let node = SCNNode()
+    let coreNode = SCNNode()
+    let glowNode = SCNNode()
+    /// 1 pendant le vol, puis 0 après l'atterrissage rejoué. La trajectoire
+    /// reste visible : seule la maquette quitte la scène.
+    var playbackVisibility = 1.0
     /// Couleur de la pastille de sa ligne. La maquette et la trace la portent
     /// aussi : c'est ce qui relie la liste au ciel.
     let rampColor: UIColor
@@ -166,6 +172,21 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     private var previousFocusTarget = SIMD3<Double>()
     private var distVelocity = 0.0
     private var azGoalVelocity = 0.0, elevGoalVelocity = 0.0, rollGoalVelocity = 0.0
+    private let motionManager = CMMotionManager()
+    private var gyroscopeReference: CMAttitude?
+    private var gyroscopeOrientation: UIInterfaceOrientation?
+    private var gyroscopeAz = 0.0
+    private var gyroscopeAzTarget = 0.0
+    private var gyroscopeAzVelocity = 0.0
+    private var gyroscopeElev = 0.0
+    private var gyroscopeElevTarget = 0.0
+    private var gyroscopeElevVelocity = 0.0
+    private var gyroscopeRoll = 0.0
+    private var gyroscopeRollTarget = 0.0
+    private var gyroscopeRollVelocity = 0.0
+    private static let gyroscopePanLimit = 3.0 * Double.pi / 180
+    private static let gyroscopeElevLimit = 2.5 * Double.pi / 180
+    private static let gyroscopeRollLimit = 2.0 * Double.pi / 180
     private enum CameraFocusIdentity: Equatable {
         case selection(Selection)
         case launch(String)
@@ -300,10 +321,21 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     var playingMission: Mission?
     private var playedBeats = 0
     private var missionCoastClock = 0.0
+    private var missionLandingClock = 0.0
+    private var missionLandingStarted = false
+    private var missionFadeClock = 0.0
+    private var missionFading = false
     /// Durée du déroulé après l'ascension. Le temps n'y coule pas uniformément :
     /// il suit la répartition par phase du tracé, sinon trois jours de croisière
     /// mangeraient tout et les boucles lunaires passeraient en un éclair.
     static let MISSION_COAST = 38.0
+    /// Les derniers 4 % ne s'arrêtent plus sur une image : la capsule conserve
+    /// sa vitesse d'entrée puis la perd progressivement jusqu'au contact.
+    static let MISSION_LANDING_START = 0.96
+    static let MISSION_LANDING_DURATION = 2 * (1 - MISSION_LANDING_START) * MISSION_COAST
+    /// Le fondu est en temps écran, indépendant de ×0,5/×2/×4 : même en lecture
+    /// rapide, l'œil doit avoir le temps de comprendre que l'engin s'est posé.
+    static let MISSION_LANDING_FADE = 0.46
     /// Fondu de la traînée d'ascension : à l'échelle Terre-Lune, les 400 km du
     /// décollage ne sont plus qu'un cil. On l'efface plutôt que de le laisser.
     /// Halo au pas de tir : la lueur qui enfle sous la poussée retenue, puis
@@ -388,7 +420,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     @Published var dateText = ""
     @Published var showTodayButton = false
     @Published var handleTopPercent = 50.0
-    @Published var satelliteNote = "Chargement des éléments orbitaux…"
     @Published var exploreView: ExploreView = .none
     /// Onglet à rouvrir : on retrouve la section d'où vient la sélection
     private(set) var lastExploreSection: ExploreView = .missions
@@ -416,11 +447,83 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     override init() {
         super.init()
         buildScene()
+        startGyroscopicMotion()
         locationManager.delegate = self
         setHome(lat: 48.8566, lon: 2.3522) // repli si la géolocalisation est refusée
         Task { await loadSatelliteElements() }
         Task { await loadLaunches() }
         updateDateText(force: true)
+    }
+
+    deinit {
+        motionManager.stopDeviceMotionUpdates()
+    }
+
+    /// Ajoute un mouvement très léger sur les trois axes de la caméra.
+    /// `deviceMotion` fusionne les capteurs : le mouvement reste stable au repos,
+    /// contrairement à une intégration brute de la vitesse angulaire.
+    private func startGyroscopicMotion() {
+        guard motionManager.isDeviceMotionAvailable,
+              !UIAccessibility.isReduceMotionEnabled else { return }
+        motionManager.deviceMotionUpdateInterval = 1.0 / 30.0
+        motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] motion, _ in
+            guard let self, let motion else { return }
+            let orientation = self.scnView?.window?.windowScene?.interfaceOrientation ?? .portrait
+
+            // La pose au lancement (et après une rotation d'écran) devient le
+            // centre neutre : l'effet accompagne le téléphone sans déplacer la
+            // composition dès l'ouverture.
+            guard self.gyroscopeOrientation == orientation,
+                  let reference = self.gyroscopeReference else {
+                self.gyroscopeOrientation = orientation
+                self.gyroscopeReference = motion.attitude.copy() as? CMAttitude
+                self.gyroscopeAzTarget = 0
+                self.gyroscopeElevTarget = 0
+                self.gyroscopeRollTarget = 0
+                return
+            }
+
+            guard let relative = motion.attitude.copy() as? CMAttitude else { return }
+            relative.multiply(byInverseOf: reference)
+            let quaternion = relative.quaternion
+            // Pour les petites amplitudes voulues ici, 2 × xyz est le vecteur de
+            // rotation. On le remappe dans les axes visibles de l'écran.
+            let rotationX = 2 * quaternion.x
+            let rotationY = 2 * quaternion.y
+            let rotationZ = 2 * quaternion.z
+            let screenHorizontal: Double
+            let screenVertical: Double
+            switch orientation {
+            case .portraitUpsideDown:
+                screenHorizontal = -rotationY
+                screenVertical = -rotationX
+            case .landscapeLeft:
+                screenHorizontal = -rotationX
+                screenVertical = rotationY
+            case .landscapeRight:
+                screenHorizontal = rotationX
+                screenVertical = -rotationY
+            default:
+                screenHorizontal = rotationY
+                screenVertical = rotationX
+            }
+
+            let pan = screenHorizontal * 0.16
+            let elevation = -screenVertical * 0.14
+            let roll = rotationZ * 0.1
+            self.gyroscopeAzTarget = max(
+                -Self.gyroscopePanLimit,
+                min(Self.gyroscopePanLimit, pan)
+            )
+            self.gyroscopeElevTarget = max(
+                -Self.gyroscopeElevLimit,
+                min(Self.gyroscopeElevLimit, elevation)
+            )
+            self.gyroscopeRollTarget = max(
+                -Self.gyroscopeRollLimit,
+                min(Self.gyroscopeRollLimit, roll)
+            )
+        }
     }
 
     func requestLocation() {
@@ -480,7 +583,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         sunSphere.materials = [sunMaterial]
         sunNode.geometry = sunSphere
         scene.rootNode.addChildNode(sunNode)
-        TextureLoader.shared.load(TextureLoader.base + "sunmap.jpg") { image in
+        TextureLoader.shared.load(TextureLoader.base + "sunmap-cosmic.jpg") { image in
             sunMaterial.diffuse.contents = image
         }
         let haloSphere = SCNSphere(radius: 6.2)
@@ -560,7 +663,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 ringMaterial.writesToDepthBuffer = false
                 ring.geometry!.materials = [ringMaterial]
                 planet.node.addChildNode(ring)
-                TextureLoader.shared.load(TextureLoader.base + "saturnringcolor.jpg") { image in
+                TextureLoader.shared.load(TextureLoader.base + "saturnringcolor-cosmic.jpg") { image in
                     ringMaterial.diffuse.contents = image
                     ringMaterial.transparency = 0.92
                 }
@@ -587,7 +690,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 system.group.addChildNode(moon.node)
                 scene.rootNode.addChildNode(moon.trail.node)
                 if spec.name == "Lune" {
-                    TextureLoader.shared.load(TextureLoader.base + "moonmap1k.jpg") { image in
+                    TextureLoader.shared.load(TextureLoader.base + "moonmap1k-cosmic.jpg") { image in
                         material.diffuse.contents = image
                     }
                 }
@@ -607,13 +710,15 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 ? RampPalette.position(index, of: missionSpecs.count)
                 : RampPalette.position(index - missionSpecs.count, of: crewedSpecs.count)
             let mission = Mission(spec: spec, ramp: ramp)
-            let core = SCNNode(geometry: Geo.octahedron(radius: 0.75))
+            let core = mission.coreNode
+            core.geometry = Geo.octahedron(radius: 0.75)
             let coreMaterial = SCNMaterial()
             coreMaterial.lightingModel = .blinn
             coreMaterial.diffuse.contents = mission.rampColor
             coreMaterial.emission.contents = mission.rampColor.withAlphaComponent(0.35)
             core.geometry!.materials = [coreMaterial]
-            let glow = SCNNode(geometry: SCNSphere(radius: 1.55))
+            let glow = mission.glowNode
+            glow.geometry = SCNSphere(radius: 1.55)
             let glowMaterial = SCNMaterial()
             glowMaterial.lightingModel = .constant
             glowMaterial.diffuse.contents = mission.rampColor
@@ -893,7 +998,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
                 _ = satellitePosition(model, day: propagationDay())
             }
         }
-        updateSatelliteNote()
         listVersion += 1
     }
 
@@ -925,28 +1029,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             launchSpecs = list
             launchListVersion += 1
         }
-    }
-
-    func updateSatelliteNote() {
-        guard let epoch = tleEpochDay else {
-            satelliteNote = "Chargement des éléments orbitaux…"
-            return
-        }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "fr_FR")
-        formatter.dateFormat = "d MMM yyyy"
-        let epochText = formatter.string(from: Astro.date(fromDay: epoch))
-        // Avant leur lancement, la liste énumère des objets qui n'existent pas
-        // encore : autant le dire plutôt que de laisser un ciel vide.
-        if satModels.allSatisfy({ model in
-            model.launchYear.map { Astro.decimalYear(day) < Double($0) } ?? false
-        }) {
-            satelliteNote = "Aucun satellite à cette date · revenir à aujourd'hui"
-            return
-        }
-        satelliteNote = tleUsable()
-            ? "Propagation SGP4 · TLE du " + epochText
-            : "Positions indicatives · loin du TLE du " + epochText
     }
 
     // MARK: Sélection
@@ -1082,7 +1164,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         if view == .satellites {
             setSelected(.planet(earth))
             goalDist = 9
-            updateSatelliteNote()
         }
         if view != .launches {
             if selectedLaunch != nil {
@@ -1112,6 +1193,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         missionCoastClock = 0
         missionCoastEase = 0
         missionCoastFloor = 1
+        missionLandingClock = 0
+        missionLandingStarted = false
+        missionFadeClock = 0
+        missionFading = false
+        mission.playbackVisibility = 1
         missionBeatLabel = ""
         playbackPaused = false
         // Le décollage se joue à l'échelle de la seconde : la timeline se cale
@@ -1190,8 +1276,11 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     /// Sortir du rejeu : dès qu'on touche à la timeline ou qu'on choisit autre chose.
     func stopMissionPlayback(clearSelection: Bool = true) {
         guard playingMission != nil else { return }
+        playingMission?.playbackVisibility = 1
         playingMission = nil
         playedBeats = 0
+        missionLandingStarted = false
+        missionFading = false
         playbackPaused = false
         missionBeatLabel = ""
         padFlare.isHidden = true
@@ -1201,6 +1290,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
 
     func selectMission(_ mission: Mission) {
         stopMissionPlayback(clearSelection: false)
+        mission.playbackVisibility = 1
         Haptics.shared.picked()
         // Sonde hors de sa période : on cale la date sur sa borne, sinon il n'y a rien à voir
         let bounds = missionDayRange(mission.spec)
@@ -1522,10 +1612,15 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
     }
 
     func placeCamera() {
+        let visualAz = az + gyroscopeAz
+        let visualElev = max(
+            -Self.cameraElevationLimit,
+            min(Self.cameraElevationLimit, elev + gyroscopeElev)
+        )
         var eye = SIMD3(
-            target.x + sin(az) * cos(elev) * dist,
-            target.y + sin(elev) * dist,
-            target.z + cos(az) * cos(elev) * dist
+            target.x + sin(visualAz) * cos(visualElev) * dist,
+            target.y + sin(visualElev) * dist,
+            target.z + cos(visualAz) * cos(visualElev) * dist
         )
         if launchShake > 1e-5 {
             // Trois fréquences incommensurables (~15 à 21 Hz) : le motif ne se
@@ -1541,7 +1636,7 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         // base recalculée du vecteur haut du monde. Sans ce `up:` explicite,
         // `look(at:)` repart de l'orientation déjà roulée et le roulis
         // s'additionne d'une image sur l'autre : la vue part en toupie.
-        let localRoll = simd_quatf(angle: Float(roll), axis: SIMD3<Float>(0, 0, 1))
+        let localRoll = simd_quatf(angle: Float(roll + gyroscopeRoll), axis: SIMD3<Float>(0, 0, 1))
         func aim(at point: SIMD3<Double>) {
             cameraNode.look(
                 at: SCNVector3(point),
@@ -1850,6 +1945,19 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         let dt = lastFrameTime == 0 ? 0.016 : min(0.05, time - lastFrameTime)
         lastFrameTime = time
 
+        gyroscopeAz = smoothDamp(
+            gyroscopeAz, toward: gyroscopeAzTarget,
+            velocity: &gyroscopeAzVelocity, smoothTime: 0.22, deltaTime: dt
+        )
+        gyroscopeElev = smoothDamp(
+            gyroscopeElev, toward: gyroscopeElevTarget,
+            velocity: &gyroscopeElevVelocity, smoothTime: 0.22, deltaTime: dt
+        )
+        gyroscopeRoll = smoothDamp(
+            gyroscopeRoll, toward: gyroscopeRollTarget,
+            velocity: &gyroscopeRollVelocity, smoothTime: 0.22, deltaTime: dt
+        )
+
         var uiDirty = false
 
         if abs(detailExpansionTarget - detailExpansionProgress) > 0.0005 {
@@ -1970,6 +2078,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             let screen = min(3, dist * 0.0059)
             let scale = Float((playing ? screen : max(0.06, screen)) * (isSelected ? 1.35 : 1))
             mission.node.scale = SCNVector3(scale, scale, scale)
+            mission.coreNode.opacity = CGFloat(mission.playbackVisibility)
+            // La lumière résiduelle s'éteint un peu avant la masse de la capsule,
+            // comme un halo qui perd sa source plutôt qu'un second objet coupé.
+            mission.glowNode.opacity = CGFloat(pow(mission.playbackVisibility, 1.35))
             guard isSelected, visible else {
                 mission.trail.update(points: [], opacity: 0)
                 mission.trailRadius = 0
@@ -2041,7 +2153,6 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             noteOutOfRange = !tleValid
             lastBornSignature = bornSignature
             DispatchQueue.main.async {
-                self.updateSatelliteNote()
                 self.listVersion += 1
                 if case .satellite(let s) = self.selected { self.selectionSub = self.satelliteMeta(s) }
             }
@@ -2497,8 +2608,46 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         // linéairement, l'essentiel du gain tombe au milieu de la rampe et se lit
         // comme une secousse. En doublant à intervalle constant, l'accélération
         // est la même à chaque instant — c'est ce qu'on perçoit comme fluide.
-        missionCoastClock += dt * pow(missionCoastFloor, 1 - missionCoastEase)
-        let k = min(1, missionCoastClock / Self.MISSION_COAST)
+        let coastStep = dt * pow(missionCoastFloor, 1 - missionCoastEase)
+        let k: Double
+        if missionFading {
+            // Sortie rare et explicative : une disparition franche mais lisible.
+            // L'opacité suit un ease-out fort ; aucun changement de géométrie ou
+            // de layout n'est animé.
+            missionFadeClock += rawDt
+            let u = min(1, missionFadeClock / Self.MISSION_LANDING_FADE)
+            mission.playbackVisibility = pow(1 - u, 3)
+            k = 1
+        } else if missionLandingStarted {
+            missionLandingClock += dt
+            let u = min(1, missionLandingClock / Self.MISSION_LANDING_DURATION)
+            // Quadratique ease-out : vitesse continue à l'entrée, nulle au sol.
+            let eased = 1 - (1 - u) * (1 - u)
+            k = Self.MISSION_LANDING_START
+                + (1 - Self.MISSION_LANDING_START) * eased
+            if u >= 1 {
+                missionFading = true
+                missionFadeClock = 0
+            }
+        } else {
+            missionCoastClock += coastStep
+            let linearK = min(1, missionCoastClock / Self.MISSION_COAST)
+            if linearK >= Self.MISSION_LANDING_START {
+                missionLandingStarted = true
+                // Conserve le petit dépassement de cette image : aucune marche
+                // arrière au passage de la croisière à la décélération.
+                missionLandingClock = max(
+                    0,
+                    (linearK - Self.MISSION_LANDING_START) * Self.MISSION_COAST
+                )
+                let u = min(1, missionLandingClock / Self.MISSION_LANDING_DURATION)
+                let eased = 1 - (1 - u) * (1 - u)
+                k = Self.MISSION_LANDING_START
+                    + (1 - Self.MISSION_LANDING_START) * eased
+            } else {
+                k = linearK
+            }
+        }
         let target = isLunar ? crewedSampleDay(c, at: k) : c.launchDay + c.days * k
         day = target
         parkTimeline()
@@ -2521,9 +2670,10 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             case .coast, .liftoff: Haptics.shared.selected()
             }
         }
-        if k >= 1 {
+        if missionFading, missionFadeClock >= Self.MISSION_LANDING_FADE {
             // Fin du rejeu : la trajectoire complète reste à l'écran, la timeline
-            // rend la main.
+            // rend la main après que la maquette et son halo ont disparu.
+            mission.playbackVisibility = 0
             playingMission = nil
             padFlare.isHidden = true
             launchShake = 0

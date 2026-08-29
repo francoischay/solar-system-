@@ -20,7 +20,25 @@ struct ExplorerPanel: View {
                     case .none: EmptyView()
                     }
                 }
+                // Une ligne qui quitte la plaque se dissout dans le verre au lieu
+                // d'être tranchée par la limite géométrique de la ScrollView.
+                // Les marges gardent la première et la dernière ligne pleinement
+                // opaques lorsqu'elles sont réellement au bord de la liste.
+                .contentMargins(.vertical, 12, for: .scrollContent)
+                .scrollIndicators(.hidden)
                 .frame(maxHeight: 360)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.045),
+                            .init(color: .black, location: 0.955),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
                 .onAppear { reveal(with: scroll, animated: false) }
                 .onChange(of: engine.exploreView) { reveal(with: scroll, animated: false) }
             }
@@ -28,8 +46,10 @@ struct ExplorerPanel: View {
             .padding(.bottom, 10)
         }
         .padding(.top, 6)
+        .buttonStyle(PressScaleButtonStyle())
         .background(GlassStyle.panel, in: RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(GlassStyle.border, lineWidth: 1))
+        .solarReactive(in: RoundedRectangle(cornerRadius: 24), strength: 1.05, cornerRadius: 24)
         .transition(.scale(scale: 0.94, anchor: .bottomLeading).combined(with: .opacity))
     }
 
@@ -64,7 +84,9 @@ struct ExplorerPanel: View {
                     .foregroundStyle(.white)
                     .frame(width: 34, height: 34)
                     .background(.white.opacity(0.1), in: Circle())
+                    .solarReactive(in: Circle(), strength: 0.8)
             }
+            .buttonStyle(PressScaleButtonStyle())
         }
         .padding(.horizontal, 8)
     }
@@ -86,6 +108,8 @@ struct ExplorerPanel: View {
                 .padding(.vertical, 8)
                 .background(active ? Highlight.fill : .clear, in: RoundedRectangle(cornerRadius: 13))
         }
+        .solarReactive(in: RoundedRectangle(cornerRadius: 13), strength: active ? 0.7 : 0.26, cornerRadius: 13)
+        .buttonStyle(PressScaleButtonStyle())
     }
 }
 
@@ -147,6 +171,11 @@ struct ExplorerRow<Trailing: View>: View {
             RoundedRectangle(cornerRadius: RowStyle.radius)
                 .strokeBorder(selected ? RowStyle.selectedBorder : .clear, lineWidth: 1.5)
         )
+        .solarReactive(
+            in: RoundedRectangle(cornerRadius: RowStyle.radius),
+            strength: selected ? 0.72 : 0.24,
+            cornerRadius: RowStyle.radius
+        )
         .contentShape(RoundedRectangle(cornerRadius: RowStyle.radius))
     }
 }
@@ -154,17 +183,6 @@ struct ExplorerRow<Trailing: View>: View {
 extension ExplorerRow where Trailing == EmptyView {
     init(chip: Color, glyph: RowGlyph, title: String, meta: String, selected: Bool) {
         self.init(chip: chip, glyph: glyph, title: title, meta: meta, selected: selected) { EmptyView() }
-    }
-}
-
-/// Note de bas de liste
-private struct ListNote: View {
-    let text: String
-    var body: some View {
-        Text(text)
-            .font(TypeScale.meta)
-            .foregroundStyle(.white.opacity(0.55))
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -203,26 +221,23 @@ struct CrewedList: View {
     @EnvironmentObject var engine: Engine
 
     var body: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 7) {
-                ForEach(engine.missions.filter { $0.spec.crewed != nil }, id: \.spec.n) { mission in
-                    Button {
-                        // Choisir un vol, c'est le rejouer : même idiome qu'un
-                        // lancement, où la sélection déclenche la séquence.
-                        withAnimation(.easeOut(duration: 0.18)) { engine.playMission(mission) }
-                    } label: {
-                        ExplorerRow(
-                            chip: Color(uiColor: mission.rampColor),
-                            glyph: .symbol("person.fill"),
-                            title: mission.spec.n,
-                            meta: mission.spec.valid,
-                            selected: engine.selected == .mission(mission)
-                        )
-                    }
-                    .id(mission.spec.n)
+        VStack(spacing: 7) {
+            ForEach(engine.missions.filter { $0.spec.crewed != nil }, id: \.spec.n) { mission in
+                Button {
+                    // Choisir un vol, c'est le rejouer : même idiome qu'un
+                    // lancement, où la sélection déclenche la séquence.
+                    withAnimation(.easeOut(duration: 0.18)) { engine.playMission(mission) }
+                } label: {
+                    ExplorerRow(
+                        chip: Color(uiColor: mission.rampColor),
+                        glyph: .symbol("person.fill"),
+                        title: mission.spec.n,
+                        meta: mission.spec.valid,
+                        selected: engine.selected == .mission(mission)
+                    )
                 }
+                .id(mission.spec.n)
             }
-            ListNote(text: "Choisir un vol le rejoue, du décollage au retour")
         }
         .padding(.top, 4)
     }
@@ -257,7 +272,10 @@ struct SatelliteList: View {
                     .foregroundStyle(.white.opacity(0.8))
             }
             .tint(Highlight.violet)
-            ListNote(text: engine.satelliteNote)
+            // Même axe gauche que les pastilles des lignes, et assez d'air à
+            // droite pour que le switch reste dans la plaque de verre.
+            .padding(.horizontal, 10)
+            .frame(minHeight: 40)
         }
         .padding(.top, 4)
         .id(engine.listVersion)
@@ -272,33 +290,30 @@ struct LaunchList: View {
     private let ticker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 7) {
-                ForEach(Array(engine.launchSpecs.enumerated()), id: \.element.id) { index, launch in
-                    Button {
-                        withAnimation(.easeOut(duration: 0.18)) { engine.selectLaunch(launch) }
-                    } label: {
-                        ExplorerRow(
-                            chip: RowStyle.chipColor(at: RowStyle.rampPosition(index, of: engine.launchSpecs.count)),
-                            glyph: .symbol("arrow.up"),
-                            title: launch.n,
-                            meta: launch.meta,
-                            selected: engine.selectedLaunch == launch
-                        ) {
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(countdown(launch))
-                                    .font(TypeScale.label)
-                                    .foregroundStyle(Highlight.warm)
-                                Text(launch.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
-                                    .font(TypeScale.meta)
-                                    .foregroundStyle(RowStyle.meta)
-                            }
+        VStack(spacing: 7) {
+            ForEach(Array(engine.launchSpecs.enumerated()), id: \.element.id) { index, launch in
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { engine.selectLaunch(launch) }
+                } label: {
+                    ExplorerRow(
+                        chip: RowStyle.chipColor(at: RowStyle.rampPosition(index, of: engine.launchSpecs.count)),
+                        glyph: .symbol("arrow.up"),
+                        title: launch.n,
+                        meta: launch.meta,
+                        selected: engine.selectedLaunch == launch
+                    ) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(countdown(launch))
+                                .font(TypeScale.label)
+                                .foregroundStyle(Highlight.warm)
+                            Text(launch.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
+                                .font(TypeScale.meta)
+                                .foregroundStyle(RowStyle.meta)
                         }
                     }
-                    .id(launch.id)
                 }
+                .id(launch.id)
             }
-            ListNote(text: "Fenêtres indicatives · trajectoire non télémétrique")
         }
         .padding(.top, 4)
         .id(engine.launchListVersion)

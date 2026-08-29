@@ -210,10 +210,11 @@ final class TextureLoader {
     static let shared = TextureLoader()
     static let base = "https://cdn.jsdelivr.net/gh/jeromeetienne/threex.planets@master/images/"
     static let planetMaps: [String: String] = [
-        "Mercure": "mercurymap.jpg", "Vénus": "venusmap.jpg", "Mars": "marsmap1k.jpg",
-        "Jupiter": "jupitermap.jpg", "Saturne": "saturnmap.jpg", "Uranus": "uranusmap.jpg", "Neptune": "neptunemap.jpg",
+        "Mercure": "mercurymap-cosmic.jpg", "Vénus": "venusmap-cosmic.jpg", "Mars": "marsmap1k-cosmic.jpg",
+        "Jupiter": "jupitermap-cosmic.jpg", "Saturne": "saturnmap-cosmic.jpg",
+        "Uranus": "uranusmap-cosmic.jpg", "Neptune": "neptunemap-cosmic.jpg",
     ]
-    static let earthURL = "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg"
+    static let earthURL = base + "earth_atmos_4096-cosmic-v2.jpg"
 
     private var cacheDir: URL {
         let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("maps")

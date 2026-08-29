@@ -2,11 +2,24 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var engine: Engine
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scaleMenuOpen = false
     @State private var dockExpansionProgress: CGFloat = 0
+    @State private var glassTouchPosition = CGPoint.zero
+    @State private var glassTouchIntensity: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
+            let frame = proxy.frame(in: .global)
+            let solarLight = SolarInterfaceLight(
+                position: CGPoint(
+                    x: frame.minX + engine.sunScreenPosition.x * proxy.size.width,
+                    y: frame.minY + engine.sunScreenPosition.y * proxy.size.height
+                ),
+                intensity: engine.sunInterfaceIntensity,
+                touchPosition: glassTouchPosition,
+                touchIntensity: glassTouchIntensity
+            )
             ZStack {
                 SpaceBackground()
                 SceneContainer()
@@ -41,6 +54,14 @@ struct ContentView: View {
                     )
                 }
             }
+            .environment(\.solarInterfaceLight, solarLight)
+            .environment(\.glassPressAction) { position, pressed in
+                glassTouchPosition = position
+                withAnimation(reduceMotion ? .easeOut(duration: 0.12)
+                                           : .spring(duration: 0.26, bounce: 0)) {
+                    glassTouchIntensity = pressed ? 1 : 0
+                }
+            }
             .onAppear { engine.requestLocation() }
         }
     }
@@ -55,6 +76,8 @@ struct ContentView: View {
                 .padding(.vertical, 8)
                 .background(Color(red: 0.12, green: 0.07, blue: 0.30).opacity(0.72), in: Capsule())
                 .overlay(Capsule().strokeBorder(GlassStyle.border.opacity(0.8), lineWidth: 1))
+                .solarReactive(in: Capsule(), strength: 0.8)
+                .buttonStyle(PressScaleButtonStyle())
                 .padding(.trailing, 8)
         }
         .frame(maxHeight: .infinity, alignment: .center)
@@ -82,6 +105,7 @@ struct ContentView: View {
                         .frame(width: DockMetrics.height, height: DockMetrics.height)
                         .background(engine.exploreView != .none ? AnyShapeStyle(Highlight.fill) : AnyShapeStyle(GlassStyle.fill), in: Circle())
                         .overlay(Circle().strokeBorder(GlassStyle.border, lineWidth: 1))
+                        .solarReactive(in: Circle(), strength: engine.exploreView != .none ? 0.7 : 1)
                 }
                 .buttonStyle(PressScaleButtonStyle())
 
@@ -99,6 +123,7 @@ struct ContentView: View {
                         .frame(width: DockMetrics.height, height: DockMetrics.height)
                         .background(scaleMenuOpen ? AnyShapeStyle(Highlight.fill) : AnyShapeStyle(GlassStyle.fill), in: Circle())
                         .overlay(Circle().strokeBorder(GlassStyle.border, lineWidth: 1))
+                        .solarReactive(in: Circle(), strength: scaleMenuOpen ? 0.7 : 1)
                 }
                 .buttonStyle(PressScaleButtonStyle())
             }
@@ -141,21 +166,18 @@ struct ContentView: View {
 struct SpaceBackground: View {
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.010, green: 0.014, blue: 0.085),
-                    Color(red: 0.055, green: 0.032, blue: 0.165),
-                    Color(red: 0.10, green: 0.055, blue: 0.235),
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
+            Color(red: 0.010, green: 0.012, blue: 0.070)
+            EllipticalGradient(
+                colors: [Highlight.violet.opacity(0.36), Highlight.violet.opacity(0.10), .clear],
+                center: UnitPoint(x: 0.04, y: 0.96),
+                startRadiusFraction: 0,
+                endRadiusFraction: 0.92
             )
-            RadialGradient(
-                colors: [Highlight.violet.opacity(0.38), .clear],
-                center: UnitPoint(x: 0.12, y: 0.86), startRadius: 0, endRadius: 320
-            )
-            RadialGradient(
-                colors: [Highlight.warm.opacity(0.10), .clear],
-                center: UnitPoint(x: 0.8, y: 0.18), startRadius: 0, endRadius: 300
+            EllipticalGradient(
+                colors: [Highlight.warm.opacity(0.075), .clear],
+                center: UnitPoint(x: 0.96, y: 0.08),
+                startRadiusFraction: 0,
+                endRadiusFraction: 0.76
             )
         }
         .ignoresSafeArea()
@@ -233,24 +255,166 @@ enum Highlight {
 }
 
 enum GlassStyle {
-    static let fill = LinearGradient(
-        colors: [Color(red: 0.44, green: 0.26, blue: 0.82).opacity(0.20), Color(red: 0.10, green: 0.06, blue: 0.26).opacity(0.34)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-    static let border = Color(red: 0.88, green: 0.78, blue: 1).opacity(0.24)
-    /// Le panneau se pose sur le fond au lieu d'y flotter : mêmes violets, deux
-    /// crans plus sombres, et non plus un bleu qui n'existe nulle part ailleurs.
-    static let panel = LinearGradient(
-        colors: [Color(red: 0.145, green: 0.085, blue: 0.355).opacity(0.92), Color(red: 0.045, green: 0.028, blue: 0.165).opacity(0.95)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
+    /// Une teinte neutre et translucide : la structure vient du flou et du
+    /// reflet, plus d'un aplat diagonal imprimé dans chaque composant.
+    static let fill = Color(red: 0.16, green: 0.13, blue: 0.27).opacity(0.14)
+    static let border = Color.white.opacity(0.10)
+    /// Les grands panneaux gardent davantage de teinte pour préserver la
+    /// lisibilité, mais laissent encore le décor nourrir leur matière.
+    static let panel = Color(red: 0.07, green: 0.05, blue: 0.15).opacity(0.40)
+}
+
+// MARK: - Lumière d'interface
+
+/// Une seule lumière traverse les couches SwiftUI. Elle est exprimée dans le
+/// repère global de l'écran afin qu'un bouton, un cartouche et un grand panneau
+/// reçoivent tous le reflet depuis exactement le même point.
+struct SolarInterfaceLight: Equatable {
+    let position: CGPoint
+    let intensity: CGFloat
+    let touchPosition: CGPoint
+    let touchIntensity: CGFloat
+
+    static let fallback = SolarInterfaceLight(
+        position: CGPoint(x: UIScreen.main.bounds.midX, y: UIScreen.main.bounds.height * 0.32),
+        intensity: 0.7,
+        touchPosition: .zero,
+        touchIntensity: 0
     )
 }
 
+private struct SolarInterfaceLightKey: EnvironmentKey {
+    static let defaultValue = SolarInterfaceLight.fallback
+}
+
+extension EnvironmentValues {
+    var solarInterfaceLight: SolarInterfaceLight {
+        get { self[SolarInterfaceLightKey.self] }
+        set { self[SolarInterfaceLightKey.self] = newValue }
+    }
+
+    var glassPressAction: (CGPoint, Bool) -> Void {
+        get { self[GlassPressActionKey.self] }
+        set { self[GlassPressActionKey.self] = newValue }
+    }
+}
+
+private struct GlassPressActionKey: EnvironmentKey {
+    static let defaultValue: (CGPoint, Bool) -> Void = { _, _ in }
+}
+
+private struct SolarReactiveSurface<S: InsettableShape>: ViewModifier {
+    @Environment(\.solarInterfaceLight) private var light
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    let shape: S
+    let strength: CGFloat
+    let cornerRadius: CGFloat?
+
+    func body(content: Content) -> some View {
+        content
+            // Le flou du décor est la matière de base. Les couches suivantes
+            // ne font qu'en révéler le volume, comme chez Linear.
+            .background(reduceTransparency ? AnyShapeStyle(GlassStyle.panel)
+                                           : AnyShapeStyle(.ultraThinMaterial),
+                        in: shape)
+            .overlay {
+                GeometryReader { proxy in
+                    let frame = proxy.frame(in: .global)
+                let dx = light.position.x - frame.midX
+                let dy = light.position.y - frame.midY
+                let solarLength = max(1, hypot(dx, dy))
+                let solarX = dx / solarLength
+                let solarY = dy / solarLength
+                let touchDX = light.touchPosition.x - frame.midX
+                let touchDY = light.touchPosition.y - frame.midY
+                let touchDistance = hypot(touchDX, touchDY)
+                let touchReach: CGFloat = 220
+                let touchInfluence = light.touchIntensity
+                    * max(0, 1 - touchDistance / touchReach)
+                    * strength
+                let touchLength = max(1, touchDistance)
+                let sourceX = solarX + touchDX / touchLength * touchInfluence * 1.5
+                let sourceY = solarY + touchDY / touchLength * touchInfluence * 1.5
+                let sourceLength = max(1, hypot(sourceX, sourceY))
+                let ux = sourceX / sourceLength
+                let uy = sourceY / sourceLength
+                let effectiveStrength = (strength * light.intensity + touchInfluence * 0.34)
+                    * (reduceMotion ? 0.62 : 1)
+                    * (reduceTransparency ? 0.72 : 1)
+                let darkEdge = UnitPoint(x: 0.5 - ux * 0.48, y: 0.5 - uy * 0.48)
+                let touchX = max(0, min(frame.width, light.touchPosition.x - frame.minX))
+                let touchY = max(0, min(frame.height, light.touchPosition.y - frame.minY))
+                let resolvedRadius = cornerRadius ?? min(frame.width, frame.height) * 0.5
+                let shader = ShaderLibrary.solarGlass(
+                    .float2(frame.size),
+                    .float(resolvedRadius),
+                    .float2(ux, uy),
+                    .float(effectiveStrength),
+                    .float2(touchX, touchY),
+                    .float(touchInfluence),
+                    .color(Highlight.violet),
+                    .color(Highlight.accent),
+                    .color(Highlight.warm)
+                )
+
+                ZStack {
+                    shape.fill(shader)
+                        .blendMode(.plusLighter)
+
+                    shape
+                        .strokeBorder(Color.black.opacity(0.18 * effectiveStrength), lineWidth: 0.7)
+                        .mask(
+                            RadialGradient(
+                                colors: [.white, .clear],
+                                center: darkEdge,
+                                startRadius: 0,
+                                endRadius: max(frame.width, frame.height) * 0.64
+                            )
+                        )
+                }
+                .compositingGroup()
+                    }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+    }
+}
+
+extension View {
+    func solarReactive<S: InsettableShape>(
+        in shape: S,
+        strength: CGFloat = 1,
+        cornerRadius: CGFloat? = nil
+    ) -> some View {
+        modifier(SolarReactiveSurface(
+            shape: shape,
+            strength: strength,
+            cornerRadius: cornerRadius
+        ))
+    }
+}
+
 struct PressScaleButtonStyle: ButtonStyle {
+    @Environment(\.glassPressAction) private var glassPressAction
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onChange(of: configuration.isPressed) { _, pressed in
+                            let frame = proxy.frame(in: .global)
+                            glassPressAction(
+                                CGPoint(x: frame.midX, y: frame.midY),
+                                pressed
+                            )
+                        }
+                }
+            }
     }
 }
 
@@ -345,6 +509,7 @@ struct InfoCard: View {
         .background(.ultraThinMaterial, in: shape)
         .clipShape(shape)
         .overlay(shape.strokeBorder(GlassStyle.border, lineWidth: 1))
+        .solarReactive(in: shape, strength: 1.1, cornerRadius: cornerRadius)
         .accessibilityAction(named: Text(detailExpanded ? "Réduire le détail" : "Agrandir le détail")) {
             snap(expanded: !detailExpanded)
         }
@@ -571,6 +736,7 @@ struct TimelineBar: View {
                     .padding(.horizontal, 11)
                     .padding(.vertical, 8)
                     .background(Highlight.fill.opacity(0.96), in: Capsule())
+                    .solarReactive(in: Capsule(), strength: 0.72)
                     .shadow(color: Color(red: 0.02, green: 0.01, blue: 0.10).opacity(draggingHandle ? 0.34 : 0.2), radius: draggingHandle ? 15 : 12, y: 8)
                     .scaleEffect(draggingHandle ? 1.06 : 1)
                     .offset(x: draggingHandle ? -72 : 0)
@@ -632,6 +798,7 @@ struct PlaybackBar: View {
         .padding(.vertical, 4)
         .background(GlassStyle.panel, in: Capsule())
         .overlay(Capsule().strokeBorder(GlassStyle.border, lineWidth: 1))
+        .solarReactive(in: Capsule(), strength: 0.92)
         .frame(maxWidth: .infinity)
         .transition(.scale(scale: 0.94, anchor: .bottomLeading).combined(with: .opacity))
     }
@@ -654,6 +821,8 @@ struct PlaybackBar: View {
                                       : AnyShapeStyle(Color.clear),
                             in: Circle())
         }
+        .solarReactive(in: Circle(), strength: prominent ? 0.72 : 0.42)
+        .buttonStyle(PressScaleButtonStyle())
         .accessibilityLabel(label)
     }
 }
@@ -682,12 +851,23 @@ struct ScaleMenu: View {
                         .padding(.horizontal, 13)
                         .padding(.vertical, 10)
                         .background(active ? Highlight.fill : .clear, in: RoundedRectangle(cornerRadius: 15))
+                        .solarReactive(
+                            in: RoundedRectangle(cornerRadius: 15),
+                            strength: active ? 0.72 : 0.3,
+                            cornerRadius: 15
+                        )
                 }
+                .buttonStyle(PressScaleButtonStyle())
             }
         }
         .padding(5)
         .background(GlassStyle.panel, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(GlassStyle.border, lineWidth: 1))
+        .solarReactive(
+            in: RoundedRectangle(cornerRadius: 20),
+            strength: 1,
+            cornerRadius: 20
+        )
         .transition(.scale(scale: 0.92, anchor: .bottomTrailing).combined(with: .opacity))
     }
 }

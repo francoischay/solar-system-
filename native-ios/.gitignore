@@ -1,4 +1,7 @@
 build/
+DeviceBuild/
+WatchBuild/
+WatchIntermediates/
 DerivedData/
 xcuserdata/
 *.xcuserstate
