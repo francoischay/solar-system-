@@ -284,6 +284,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Votre position est utilisée uniquement pour afficher un point sur le globe terrestre.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Les mouvements de l’appareil accompagnent légèrement la vue du système solaire.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -314,6 +315,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Votre position est utilisée uniquement pour afficher un point sur le globe terrestre.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Les mouvements de l’appareil accompagnent légèrement la vue du système solaire.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -342,6 +344,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.francoischay.solarsystem3d;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -369,6 +372,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Système solaire";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.francoischay.solarsystem3d;
 				LD_RUNPATH_SEARCH_PATHS = (
