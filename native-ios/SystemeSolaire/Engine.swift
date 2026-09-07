@@ -1099,8 +1099,12 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
         default: break
         }
         hasSelection = selection != nil
-        // On remet d'abord l'horizon à plat (pôle nord en haut) : la boucle de
-        // rendu ne lance le rapprochement qu'une fois le roulis revenu à zéro.
+        // L'horizon revient à plat (pôle nord en haut) pendant le rapprochement,
+        // pas avant : roulis et zoom ont le même amorti et se posent ensemble.
+        // Seul un basculement d'élévation — la caméra qui passe par-dessus le
+        // pôle — retient le zoom. Attendre aussi le roulis figeait la Terre, le
+        // seul astre incliné, deux secondes pendant que son orbite lunaire se
+        // traçait toute seule.
         if selection != nil {
             // L'azimut est conservé : c'est lui qui cadre le bon côté de l'astre.
             if abs(elev) > Self.uprightElevationThreshold {
@@ -2472,8 +2476,8 @@ final class Engine: NSObject, ObservableObject, SCNSceneRendererDelegate, CLLoca
             target, toward: focusTarget, velocity: &targetVelocity,
             smoothTime: focusIdentity == nil ? 0.58 : 0.42, deltaTime: dt
         )
-        if zoomWaitsForLevel, goalRoll != nil || goalElev != nil {
-            distVelocity = 0 // le zoom attend que la scène soit redressée
+        if zoomWaitsForLevel, goalElev != nil {
+            distVelocity = 0 // le zoom attend que l'élévation soit rétablie
         } else {
             zoomWaitsForLevel = false
             dist = smoothDamp(
